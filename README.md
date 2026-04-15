@@ -95,6 +95,25 @@ Alternative direct GUI launch:
 python gui_dashboard.py
 ```
 
+## Update Existing Clone (Windows + Linux)
+
+For old clones, run the cross-platform updater from repo root:
+
+```bash
+python update_aartf.py
+```
+
+Optional flags:
+
+```bash
+python update_aartf.py --skip-deps
+python update_aartf.py --branch main
+```
+
+What it does:
+- Pulls latest code from GitHub with fast-forward only
+- Installs/updates dependencies from `requirements.txt` (unless skipped)
+
 ## Output Artifacts
 
 Generated in `reports/`:
