@@ -4,6 +4,7 @@ import os
 import platform
 import subprocess
 import threading
+from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from queue import Empty, Queue
@@ -34,15 +35,16 @@ class QueueWriter(io.TextIOBase):
 class AARTF_GUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("AARTF - Autonomous Security Workflow")
-        self.root.geometry("1180x760")
-        self.root.minsize(1050, 700)
-        self.root.configure(bg="#0f172a")
+        self.root.title("AARTF Security Center")
+        self.root.geometry("1360x820")
+        self.root.minsize(1220, 760)
+        self.root.configure(bg="#070d1a")
 
         self.running = False
         self.current_state = None
         self.scan_thread = None
         self.log_queue = Queue()
+        self.finding_records = {}
 
         self.persistence_var = tk.StringVar(value="MANUAL")
         self.report_after_run_var = tk.BooleanVar(value=True)
@@ -50,14 +52,20 @@ class AARTF_GUI:
         self.status_var = tk.StringVar(value="Ready")
         self.last_run_var = tk.StringVar(value="Last run: never")
         self.phase_var = tk.StringVar(value="Phase: -")
-        self.target_info_var = tk.StringVar(value="Target: -")
-        self.ports_var = tk.StringVar(value="Open ports: 0")
-        self.vulns_var = tk.StringVar(value="Vulnerabilities: 0")
-        self.actions_var = tk.StringVar(value="Actions: 0")
+        self.target_info_var = tk.StringVar(value="-")
+        self.assets_var = tk.StringVar(value="0")
+        self.ports_var = tk.StringVar(value="0")
+        self.vulns_var = tk.StringVar(value="0")
+        self.actions_var = tk.StringVar(value="0")
+        self.critical_var = tk.StringVar(value="0")
+        self.high_var = tk.StringVar(value="0")
+        self.medium_var = tk.StringVar(value="0")
+        self.low_var = tk.StringVar(value="0")
+        self.info_var = tk.StringVar(value="0")
 
         self._configure_style()
         self._build_layout()
-        self.root.after(100, self._drain_log_queue)
+        self.root.after(120, self._drain_log_queue)
 
     def _configure_style(self):
         style = ttk.Style(self.root)
@@ -66,159 +74,331 @@ class AARTF_GUI:
         except Exception:
             pass
 
-        style.configure("Card.TFrame", background="#111827")
-        style.configure("Top.TFrame", background="#0b1220")
-        style.configure("Muted.TLabel", background="#111827", foreground="#94a3b8", font=("Segoe UI", 9))
-        style.configure("Title.TLabel", background="#111827", foreground="#e2e8f0", font=("Segoe UI", 12, "bold"))
-        style.configure("Value.TLabel", background="#111827", foreground="#f8fafc", font=("Segoe UI", 15, "bold"))
-        style.configure("HeaderTitle.TLabel", background="#0b1220", foreground="#f8fafc", font=("Segoe UI", 17, "bold"))
-        style.configure("HeaderSub.TLabel", background="#0b1220", foreground="#94a3b8", font=("Segoe UI", 10))
-        style.configure("Status.TLabel", background="#0b1220", foreground="#93c5fd", font=("Segoe UI", 10, "bold"))
-        style.configure("TNotebook", background="#0f172a", borderwidth=0)
-        style.configure("TNotebook.Tab", padding=(14, 8), font=("Segoe UI", 10))
-        style.map("TNotebook.Tab", background=[("selected", "#1d4ed8")], foreground=[("selected", "white")])
+        bg_app = "#070d1a"
+        bg_sidebar = "#0b1220"
+        bg_panel = "#111a2f"
+        bg_card = "#16233d"
+        text_primary = "#edf2ff"
+        text_muted = "#9db0cf"
+        accent = "#3b82f6"
+
+        style.configure("App.TFrame", background=bg_app)
+        style.configure("Sidebar.TFrame", background=bg_sidebar)
+        style.configure("Header.TFrame", background=bg_panel)
+        style.configure("Panel.TFrame", background=bg_panel)
+        style.configure("Card.TFrame", background=bg_card)
+
+        style.configure("Brand.TLabel", background=bg_sidebar, foreground=text_primary, font=("Segoe UI", 18, "bold"))
+        style.configure("BrandSub.TLabel", background=bg_sidebar, foreground=text_muted, font=("Segoe UI", 9))
+
+        style.configure("Section.TLabel", background=bg_panel, foreground=text_primary, font=("Segoe UI", 11, "bold"))
+        style.configure("HeaderTitle.TLabel", background=bg_panel, foreground=text_primary, font=("Segoe UI", 16, "bold"))
+        style.configure("HeaderSub.TLabel", background=bg_panel, foreground=text_muted, font=("Segoe UI", 10))
+        style.configure("Caption.TLabel", background=bg_card, foreground=text_muted, font=("Segoe UI", 9))
+        style.configure("KPI.TLabel", background=bg_card, foreground=text_primary, font=("Segoe UI", 20, "bold"))
+        style.configure("SeverityLabel.TLabel", background=bg_card, foreground=text_muted, font=("Segoe UI", 10))
+        style.configure("Status.TLabel", background=bg_panel, foreground="#93c5fd", font=("Segoe UI", 10, "bold"))
+
+        style.configure("TButton", padding=(10, 7), font=("Segoe UI", 9, "bold"))
+        style.configure("Primary.TButton", padding=(12, 8), font=("Segoe UI", 9, "bold"))
+        style.map("Primary.TButton", background=[("!disabled", accent)], foreground=[("!disabled", "#ffffff")])
+        style.configure("Nav.TButton", background=bg_sidebar, foreground=text_muted, relief="flat", padding=(10, 8))
+        style.map(
+            "Nav.TButton",
+            background=[("active", "#13213a"), ("pressed", "#1f335a")],
+            foreground=[("active", "#dbeafe"), ("pressed", "#ffffff")],
+        )
+
+        style.configure("TEntry", fieldbackground="#0f1729", foreground=text_primary, insertcolor=text_primary, bordercolor="#243a60")
+        style.configure("TCombobox", fieldbackground="#0f1729", foreground=text_primary, arrowcolor=text_primary, bordercolor="#243a60")
+
+        style.configure("TNotebook", background=bg_panel, borderwidth=0)
+        style.configure("TNotebook.Tab", font=("Segoe UI", 10, "bold"), padding=(14, 8))
+        style.map("TNotebook.Tab", background=[("selected", "#264981")], foreground=[("selected", "#ffffff")])
+
+        style.configure(
+            "Treeview",
+            background="#0f1729",
+            foreground="#dbe8ff",
+            fieldbackground="#0f1729",
+            borderwidth=0,
+            rowheight=26,
+            font=("Segoe UI", 9),
+        )
+        style.configure("Treeview.Heading", background="#192741", foreground="#cddcff", font=("Segoe UI", 9, "bold"))
+        style.map("Treeview", background=[("selected", "#2f4f84")], foreground=[("selected", "#ffffff")])
 
     def _build_layout(self):
-        header = ttk.Frame(self.root, style="Top.TFrame", padding=(16, 12))
-        header.pack(fill="x")
+        self.root.columnconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
 
-        ttk.Label(header, text="AARTF Dashboard", style="HeaderTitle.TLabel").pack(anchor="w")
+        sidebar = ttk.Frame(self.root, style="Sidebar.TFrame", width=240, padding=(18, 18))
+        sidebar.grid(row=0, column=0, sticky="ns")
+        sidebar.grid_propagate(False)
+        self._build_sidebar(sidebar)
+
+        workspace = ttk.Frame(self.root, style="App.TFrame", padding=(14, 14))
+        workspace.grid(row=0, column=1, sticky="nsew")
+        workspace.columnconfigure(0, weight=1)
+        workspace.rowconfigure(2, weight=1)
+
+        self._build_toolbar(workspace)
+        self._build_kpi_row(workspace)
+        self._build_body(workspace)
+        self._build_status_bar(workspace)
+
+    def _build_sidebar(self, parent):
+        parent.rowconfigure(7, weight=1)
+
+        ttk.Label(parent, text="AARTF", style="Brand.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(parent, text="Security Operations Console", style="BrandSub.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 24))
+
+        ttk.Button(parent, text="Dashboard", style="Nav.TButton", command=lambda: self._switch_to_tab(0)).grid(
+            row=2, column=0, sticky="ew", pady=3
+        )
+        ttk.Button(parent, text="Services", style="Nav.TButton", command=lambda: self._switch_to_tab(1)).grid(
+            row=3, column=0, sticky="ew", pady=3
+        )
+        ttk.Button(parent, text="Activity", style="Nav.TButton", command=lambda: self._switch_to_tab(2)).grid(
+            row=4, column=0, sticky="ew", pady=3
+        )
+        ttk.Button(parent, text="Live Console", style="Nav.TButton", command=lambda: self._switch_to_tab(3)).grid(
+            row=5, column=0, sticky="ew", pady=3
+        )
+        ttk.Button(parent, text="Attack Graph", style="Nav.TButton", command=self.show_graph).grid(row=6, column=0, sticky="ew", pady=3)
+
+        footer = ttk.Frame(parent, style="Sidebar.TFrame")
+        footer.grid(row=8, column=0, sticky="sew")
+        ttk.Label(footer, text="Design language: enterprise SOC", style="BrandSub.TLabel").pack(anchor="w")
+        ttk.Label(footer, text="CLI workflow remains unchanged", style="BrandSub.TLabel").pack(anchor="w", pady=(2, 0))
+
+    def _build_toolbar(self, parent):
+        header = ttk.Frame(parent, style="Header.TFrame", padding=(16, 12))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        header.columnconfigure(1, weight=1)
+
+        title_block = ttk.Frame(header, style="Header.TFrame")
+        title_block.grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(title_block, text="Unified Threat Dashboard", style="HeaderTitle.TLabel").pack(anchor="w")
         ttk.Label(
-            header,
-            text="Autonomous workflow orchestration with live execution telemetry",
+            title_block,
+            text="Nessus-inspired experience for findings triage and run telemetry.",
             style="HeaderSub.TLabel",
-        ).pack(anchor="w")
+        ).pack(anchor="w", pady=(2, 8))
 
-        toolbar = ttk.Frame(self.root, style="Top.TFrame", padding=(16, 8))
-        toolbar.pack(fill="x")
+        controls = ttk.Frame(header, style="Header.TFrame")
+        controls.grid(row=1, column=0, sticky="ew")
 
-        ttk.Label(toolbar, text="Target IP / CIDR", style="HeaderSub.TLabel").pack(side="left")
-        target_entry = ttk.Entry(toolbar, textvariable=self.target_var, width=38)
-        target_entry.pack(side="left", padx=(8, 12))
+        ttk.Label(controls, text="Target", style="HeaderSub.TLabel").grid(row=0, column=0, sticky="w")
+        target_entry = ttk.Entry(controls, textvariable=self.target_var, width=36)
+        target_entry.grid(row=0, column=1, padx=(8, 12), sticky="w")
         target_entry.focus_set()
 
-        ttk.Label(toolbar, text="Persistence", style="HeaderSub.TLabel").pack(side="left")
+        ttk.Label(controls, text="Persistence", style="HeaderSub.TLabel").grid(row=0, column=2, sticky="w")
         ttk.Combobox(
-            toolbar,
+            controls,
             textvariable=self.persistence_var,
             values=["AUTO", "MANUAL", "OFF"],
             width=10,
             state="readonly",
-        ).pack(side="left", padx=(8, 12))
+        ).grid(row=0, column=3, padx=(8, 12), sticky="w")
 
-        ttk.Checkbutton(toolbar, text="Generate reports after run", variable=self.report_after_run_var).pack(side="left")
+        ttk.Checkbutton(controls, text="Generate reports after run", variable=self.report_after_run_var).grid(
+            row=0, column=4, padx=(8, 0), sticky="w"
+        )
 
-        self.start_button = ttk.Button(toolbar, text="Start", command=self.start_scan)
-        self.start_button.pack(side="right", padx=(8, 0))
-        ttk.Button(toolbar, text="Refresh Snapshot", command=self.refresh_results).pack(side="right", padx=(8, 0))
-        ttk.Button(toolbar, text="Open Reports", command=self.open_reports_folder).pack(side="right", padx=(8, 0))
-        ttk.Button(toolbar, text="Open Report", command=self.open_report).pack(side="right", padx=(8, 0))
-        ttk.Button(toolbar, text="Show Graph", command=self.show_graph).pack(side="right")
+        action_bar = ttk.Frame(header, style="Header.TFrame")
+        action_bar.grid(row=1, column=1, sticky="e")
+        self.start_button = ttk.Button(action_bar, text="Start Scan", style="Primary.TButton", command=self.start_scan)
+        self.start_button.pack(side="left", padx=(0, 8))
+        ttk.Button(action_bar, text="Refresh", command=self.refresh_results).pack(side="left", padx=4)
+        ttk.Button(action_bar, text="Open Report", command=self.open_report).pack(side="left", padx=4)
+        ttk.Button(action_bar, text="Reports Folder", command=self.open_reports_folder).pack(side="left", padx=4)
 
-        self.progress = ttk.Progressbar(self.root, mode="indeterminate")
-        self.progress.pack(fill="x", padx=16, pady=(2, 10))
+        self.progress = ttk.Progressbar(parent, mode="indeterminate")
+        self.progress.grid(row=1, column=0, sticky="ew", padx=2, pady=(2, 12))
 
-        body = ttk.Panedwindow(self.root, orient="horizontal")
-        body.pack(fill="both", expand=True, padx=16, pady=(0, 12))
+    def _build_kpi_row(self, parent):
+        cards = ttk.Frame(parent, style="App.TFrame")
+        cards.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        for i in range(4):
+            cards.columnconfigure(i, weight=1)
 
-        left = ttk.Frame(body, style="Card.TFrame", padding=12)
-        right = ttk.Frame(body, style="Card.TFrame", padding=8)
-        body.add(left, weight=2)
-        body.add(right, weight=5)
+        self._create_kpi_card(cards, 0, "Assets In Scope", self.assets_var)
+        self._create_kpi_card(cards, 1, "Open Services", self.ports_var)
+        self._create_kpi_card(cards, 2, "Findings", self.vulns_var)
+        self._create_kpi_card(cards, 3, "Actions Executed", self.actions_var)
 
-        self._build_left_panel(left)
-        self._build_right_panel(right)
+    def _create_kpi_card(self, parent, column, title, value_var):
+        card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
+        card.grid(row=0, column=column, sticky="nsew", padx=4)
+        ttk.Label(card, textvariable=value_var, style="KPI.TLabel").pack(anchor="w")
+        ttk.Label(card, text=title, style="Caption.TLabel").pack(anchor="w", pady=(2, 0))
 
-        status = ttk.Frame(self.root, style="Top.TFrame", padding=(16, 8))
-        status.pack(fill="x")
+    def _build_body(self, parent):
+        body = ttk.Panedwindow(parent, orient="horizontal")
+        body.grid(row=3, column=0, sticky="nsew")
+
+        left_panel = ttk.Frame(body, style="Panel.TFrame", padding=(10, 10))
+        right_panel = ttk.Frame(body, style="Panel.TFrame", padding=(10, 10))
+        body.add(left_panel, weight=4)
+        body.add(right_panel, weight=2)
+
+        left_panel.columnconfigure(0, weight=1)
+        left_panel.rowconfigure(0, weight=1)
+
+        self.main_notebook = ttk.Notebook(left_panel)
+        self.main_notebook.grid(row=0, column=0, sticky="nsew")
+
+        findings_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
+        services_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
+        activity_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
+        console_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
+
+        self.main_notebook.add(findings_tab, text="Findings")
+        self.main_notebook.add(services_tab, text="Services")
+        self.main_notebook.add(activity_tab, text="Activity")
+        self.main_notebook.add(console_tab, text="Live Console")
+
+        self._build_findings_table(findings_tab)
+        self._build_services_table(services_tab)
+        self._build_activity_table(activity_tab)
+        self._build_console(console_tab)
+        self._build_right_panel(right_panel)
+
+    def _build_findings_table(self, parent):
+        ttk.Label(parent, text="Vulnerability Findings", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+
+        columns = ("id", "severity", "title", "evidence")
+        self.findings_tree = ttk.Treeview(parent, columns=columns, show="headings")
+        self.findings_tree.heading("id", text="ID")
+        self.findings_tree.heading("severity", text="Severity")
+        self.findings_tree.heading("title", text="Title")
+        self.findings_tree.heading("evidence", text="Evidence")
+
+        self.findings_tree.column("id", width=90, anchor="center")
+        self.findings_tree.column("severity", width=100, anchor="center")
+        self.findings_tree.column("title", width=340, anchor="w")
+        self.findings_tree.column("evidence", width=380, anchor="w")
+        self.findings_tree.pack(fill="both", expand=True)
+        self.findings_tree.bind("<<TreeviewSelect>>", self._on_finding_selected)
+
+        self.findings_tree.tag_configure("critical", foreground="#fca5a5")
+        self.findings_tree.tag_configure("high", foreground="#fbbf24")
+        self.findings_tree.tag_configure("medium", foreground="#fde68a")
+        self.findings_tree.tag_configure("low", foreground="#86efac")
+        self.findings_tree.tag_configure("info", foreground="#93c5fd")
+
+    def _build_services_table(self, parent):
+        ttk.Label(parent, text="Service Inventory", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+        self.services_tree = ttk.Treeview(parent, columns=("port", "service"), show="headings")
+        self.services_tree.heading("port", text="Port")
+        self.services_tree.heading("service", text="Service")
+        self.services_tree.column("port", width=120, anchor="center")
+        self.services_tree.column("service", width=740, anchor="w")
+        self.services_tree.pack(fill="both", expand=True)
+        self.services_tree.bind("<<TreeviewSelect>>", self._on_service_selected)
+
+    def _build_activity_table(self, parent):
+        ttk.Label(parent, text="Execution Timeline", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+        self.action_tree = ttk.Treeview(parent, columns=("time", "action"), show="headings")
+        self.action_tree.heading("time", text="Timestamp")
+        self.action_tree.heading("action", text="Action")
+        self.action_tree.column("time", width=160, anchor="center")
+        self.action_tree.column("action", width=700, anchor="w")
+        self.action_tree.pack(fill="both", expand=True)
+        self.action_tree.bind("<<TreeviewSelect>>", self._on_action_selected)
+
+    def _build_console(self, parent):
+        ttk.Label(parent, text="Live Operator Console", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+        self.console = tk.Text(
+            parent,
+            bg="#0a1222",
+            fg="#7dd3fc",
+            insertbackground="#f8fafc",
+            wrap="word",
+            relief="flat",
+            font=("Consolas", 10),
+            padx=10,
+            pady=10,
+        )
+        self.console.pack(fill="both", expand=True)
+
+    def _build_right_panel(self, parent):
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)
+
+        severity_card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
+        severity_card.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ttk.Label(severity_card, text="Risk Breakdown", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+
+        self._create_severity_row(severity_card, "Critical", self.critical_var, "#f87171")
+        self._create_severity_row(severity_card, "High", self.high_var, "#f59e0b")
+        self._create_severity_row(severity_card, "Medium", self.medium_var, "#facc15")
+        self._create_severity_row(severity_card, "Low", self.low_var, "#4ade80")
+        self._create_severity_row(severity_card, "Info", self.info_var, "#60a5fa")
+
+        details_card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
+        details_card.grid(row=1, column=0, sticky="nsew")
+        details_card.columnconfigure(0, weight=1)
+        details_card.rowconfigure(1, weight=1)
+        ttk.Label(details_card, text="Investigation Details", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
+
+        self.details_text = tk.Text(
+            details_card,
+            bg="#0a1222",
+            fg="#dbeafe",
+            insertbackground="#f8fafc",
+            wrap="word",
+            relief="flat",
+            state="disabled",
+            font=("Consolas", 10),
+            padx=10,
+            pady=10,
+        )
+        self.details_text.grid(row=1, column=0, sticky="nsew")
+
+        guidance = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
+        guidance.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        ttk.Label(guidance, text="Run Intelligence", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+        ttk.Label(guidance, textvariable=self.target_info_var, style="Caption.TLabel").pack(anchor="w", pady=(0, 4))
+        ttk.Label(
+            guidance,
+            style="Caption.TLabel",
+            justify="left",
+            text=(
+                "- Start a run with a valid IP or CIDR target.\n"
+                "- Select any finding for full context and metadata.\n"
+                "- Refresh to sync UI with the latest in-memory state.\n"
+                "- Reports and graph assets are available after execution."
+            ),
+        ).pack(anchor="w")
+
+    def _create_severity_row(self, parent, label, count_var, color):
+        row = ttk.Frame(parent, style="Card.TFrame")
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text=label, style="SeverityLabel.TLabel").pack(side="left")
+        badge = tk.Label(
+            row,
+            textvariable=count_var,
+            bg=color,
+            fg="#071018",
+            font=("Segoe UI", 9, "bold"),
+            padx=8,
+            pady=2,
+        )
+        badge.pack(side="right")
+
+    def _build_status_bar(self, parent):
+        status = ttk.Frame(parent, style="Header.TFrame", padding=(12, 8))
+        status.grid(row=4, column=0, sticky="ew", pady=(10, 0))
         ttk.Label(status, textvariable=self.status_var, style="Status.TLabel").pack(side="left")
         ttk.Label(status, textvariable=self.phase_var, style="HeaderSub.TLabel").pack(side="left", padx=(14, 0))
         ttk.Label(status, textvariable=self.last_run_var, style="HeaderSub.TLabel").pack(side="right")
 
-    def _build_left_panel(self, parent):
-        ttk.Label(parent, text="Session Overview", style="Title.TLabel").pack(anchor="w", pady=(0, 6))
-        ttk.Label(parent, textvariable=self.target_info_var, style="Muted.TLabel").pack(anchor="w", pady=(0, 12))
-
-        for value_var, caption in (
-            (self.ports_var, "Open Services"),
-            (self.vulns_var, "Detected Issues"),
-            (self.actions_var, "Actions Executed"),
-        ):
-            card = ttk.Frame(parent, style="Card.TFrame", padding=(10, 10))
-            card.pack(fill="x", pady=6)
-            ttk.Label(card, textvariable=value_var, style="Value.TLabel").pack(anchor="w")
-            ttk.Label(card, text=caption, style="Muted.TLabel").pack(anchor="w")
-
-        tips = ttk.Frame(parent, style="Card.TFrame", padding=(10, 10))
-        tips.pack(fill="both", expand=True, pady=(14, 0))
-        ttk.Label(tips, text="Run Guidance", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
-        ttk.Label(
-            tips,
-            style="Muted.TLabel",
-            justify="left",
-            text=(
-                "- Use a valid single IP or CIDR block.\n"
-                "- Keep one active run at a time.\n"
-                "- Use Refresh Snapshot to reload tables.\n"
-                "- Reports are written under reports/."
-            ),
-        ).pack(anchor="w")
-
-    def _build_right_panel(self, parent):
-        notebook = ttk.Notebook(parent)
-        notebook.pack(fill="both", expand=True)
-
-        live_tab = ttk.Frame(notebook, style="Card.TFrame")
-        results_tab = ttk.Frame(notebook, style="Card.TFrame")
-        activity_tab = ttk.Frame(notebook, style="Card.TFrame")
-        notebook.add(live_tab, text="Live Console")
-        notebook.add(results_tab, text="Results")
-        notebook.add(activity_tab, text="Activity")
-
-        self.console = tk.Text(
-            live_tab,
-            bg="#0b1020",
-            fg="#22d3ee",
-            insertbackground="#f8fafc",
-            wrap="word",
-            font=("Consolas", 10),
-            relief="flat",
-            padx=10,
-            pady=10,
-        )
-        self.console.pack(fill="both", expand=True, padx=6, pady=6)
-
-        tables = ttk.Panedwindow(results_tab, orient="vertical")
-        tables.pack(fill="both", expand=True, padx=6, pady=6)
-
-        service_frame = ttk.Frame(tables, style="Card.TFrame")
-        vuln_frame = ttk.Frame(tables, style="Card.TFrame")
-        tables.add(service_frame, weight=1)
-        tables.add(vuln_frame, weight=1)
-
-        ttk.Label(service_frame, text="Open Services", style="Title.TLabel").pack(anchor="w", padx=8, pady=(6, 2))
-        self.services_tree = ttk.Treeview(service_frame, columns=("port", "service"), show="headings", height=8)
-        self.services_tree.heading("port", text="Port")
-        self.services_tree.heading("service", text="Service")
-        self.services_tree.column("port", width=120, anchor="center")
-        self.services_tree.column("service", width=320, anchor="w")
-        self.services_tree.pack(fill="both", expand=True, padx=8, pady=(2, 8))
-
-        ttk.Label(vuln_frame, text="Vulnerabilities", style="Title.TLabel").pack(anchor="w", padx=8, pady=(6, 2))
-        self.vuln_tree = ttk.Treeview(vuln_frame, columns=("cve", "severity"), show="headings", height=8)
-        self.vuln_tree.heading("cve", text="CVE / Type")
-        self.vuln_tree.heading("severity", text="Severity")
-        self.vuln_tree.column("cve", width=360, anchor="w")
-        self.vuln_tree.column("severity", width=120, anchor="center")
-        self.vuln_tree.pack(fill="both", expand=True, padx=8, pady=(2, 8))
-
-        ttk.Label(activity_tab, text="Action Timeline", style="Title.TLabel").pack(anchor="w", padx=8, pady=(8, 2))
-        self.action_tree = ttk.Treeview(activity_tab, columns=("time", "action"), show="headings")
-        self.action_tree.heading("time", text="Time")
-        self.action_tree.heading("action", text="Action")
-        self.action_tree.column("time", width=150, anchor="center")
-        self.action_tree.column("action", width=650, anchor="w")
-        self.action_tree.pack(fill="both", expand=True, padx=8, pady=(2, 8))
+    def _switch_to_tab(self, index):
+        if hasattr(self, "main_notebook"):
+            self.main_notebook.select(index)
 
     def _validate_target(self, value):
         candidate = (value or "").strip()
@@ -252,6 +432,7 @@ class AARTF_GUI:
         self.target_info_var.set(f"Target: {target}")
         self.start_button.config(state="disabled")
         self.progress.start(10)
+        self._set_details("Run bootstrapped", [f"Target: {target}", f"Persistence mode: {self.persistence_var.get()}"])
 
         self.scan_thread = threading.Thread(target=self._run_attack, args=(target,), daemon=True)
         self.scan_thread.start()
@@ -288,28 +469,96 @@ class AARTF_GUI:
             return
 
         self.phase_var.set(f"Phase: {state.phase}")
-        self.target_info_var.set(f"Target: {state.target.get('ip', '-')}")
+        target_text = state.target.get("ip", "-")
+        self.target_info_var.set(f"Target: {target_text}")
+        self.assets_var.set(str(self._estimate_asset_count(target_text)))
 
         services = state.network.get("services", {}) or {}
         vulns = state.network.get("vulnerabilities", []) or []
         actions = getattr(state, "actions_taken", []) or []
 
-        self.ports_var.set(f"Open ports: {len(services)}")
-        self.vulns_var.set(f"Vulnerabilities: {len(vulns)}")
-        self.actions_var.set(f"Actions: {len(actions)}")
+        self.ports_var.set(str(len(services)))
+        self.vulns_var.set(str(len(vulns)))
+        self.actions_var.set(str(len(actions)))
 
+        self._update_severity_metrics(vulns)
         self._replace_tree_rows(self.services_tree, [(str(p), str(s)) for p, s in services.items()])
-
-        vuln_rows = []
-        for vuln in vulns:
-            label = vuln.get("cve") or vuln.get("type") or "Unknown"
-            severity = vuln.get("severity", "Unknown")
-            vuln_rows.append((str(label), str(severity)))
-        self._replace_tree_rows(self.vuln_tree, vuln_rows)
+        self._populate_findings(vulns)
 
         now = datetime.now().strftime("%H:%M:%S")
-        action_rows = [(now, str(a)) for a in actions]
+        action_rows = [(now, str(action)) for action in actions]
         self._replace_tree_rows(self.action_tree, action_rows)
+
+    def _estimate_asset_count(self, target):
+        try:
+            if "/" in target:
+                network = ipaddress.ip_network(target, strict=False)
+                return max(1, network.num_addresses)
+        except ValueError:
+            pass
+        return 1 if target else 0
+
+    def _update_severity_metrics(self, vulnerabilities):
+        counts = Counter()
+        for vuln in vulnerabilities:
+            counts[self._normalize_severity(vuln)] += 1
+        self.critical_var.set(str(counts.get("CRITICAL", 0)))
+        self.high_var.set(str(counts.get("HIGH", 0)))
+        self.medium_var.set(str(counts.get("MEDIUM", 0)))
+        self.low_var.set(str(counts.get("LOW", 0)))
+        self.info_var.set(str(counts.get("INFO", 0)))
+
+    def _normalize_severity(self, vulnerability):
+        sev = str(vulnerability.get("severity", "INFO")).strip().upper()
+        if sev in ("CRIT", "CRITICAL"):
+            return "CRITICAL"
+        if sev in ("HIGH", "SEVERE"):
+            return "HIGH"
+        if sev in ("MED", "MEDIUM", "MODERATE"):
+            return "MEDIUM"
+        if sev in ("LOW", "MINOR"):
+            return "LOW"
+        return "INFO"
+
+    def _populate_findings(self, vulnerabilities):
+        self.finding_records.clear()
+        for item in self.findings_tree.get_children():
+            self.findings_tree.delete(item)
+
+        for idx, vuln in enumerate(vulnerabilities, start=1):
+            finding_id = f"F-{idx:03d}"
+            severity = self._normalize_severity(vuln)
+            title = str(vuln.get("cve") or vuln.get("type") or vuln.get("description") or "Unclassified finding")
+            evidence = self._build_evidence(vuln)
+            self.findings_tree.insert(
+                "",
+                "end",
+                values=(finding_id, severity, title, evidence),
+                tags=(severity.lower(),),
+            )
+            self.finding_records[finding_id] = vuln
+
+        if vulnerabilities:
+            first = self.findings_tree.get_children()[0]
+            self.findings_tree.selection_set(first)
+            self.findings_tree.focus(first)
+            self._on_finding_selected(None)
+        else:
+            self._set_details("No findings available", ["Run a scan and refresh to inspect vulnerabilities here."])
+
+    def _build_evidence(self, vulnerability):
+        tokens = []
+        if vulnerability.get("path"):
+            tokens.append(f"path={vulnerability.get('path')}")
+        if vulnerability.get("port"):
+            tokens.append(f"port={vulnerability.get('port')}")
+        if vulnerability.get("server"):
+            tokens.append(f"server={vulnerability.get('server')}")
+        if vulnerability.get("description"):
+            tokens.append(vulnerability.get("description"))
+        if not tokens:
+            tokens.append("No evidence string supplied")
+        return " | ".join(str(token) for token in tokens)
 
     def _replace_tree_rows(self, tree, rows):
         for item in tree.get_children():
@@ -319,11 +568,71 @@ class AARTF_GUI:
 
     def _clear_tables(self):
         self._replace_tree_rows(self.services_tree, [])
-        self._replace_tree_rows(self.vuln_tree, [])
+        self._replace_tree_rows(self.findings_tree, [])
         self._replace_tree_rows(self.action_tree, [])
-        self.ports_var.set("Open ports: 0")
-        self.vulns_var.set("Vulnerabilities: 0")
-        self.actions_var.set("Actions: 0")
+        self.finding_records.clear()
+        self.assets_var.set("0")
+        self.ports_var.set("0")
+        self.vulns_var.set("0")
+        self.actions_var.set("0")
+        self.critical_var.set("0")
+        self.high_var.set("0")
+        self.medium_var.set("0")
+        self.low_var.set("0")
+        self.info_var.set("0")
+        self._set_details("Awaiting session", ["Start a run to populate findings and contextual details."])
+
+    def _on_finding_selected(self, _event):
+        selected = self.findings_tree.selection()
+        if not selected:
+            return
+        values = self.findings_tree.item(selected[0], "values")
+        if not values:
+            return
+        finding_id = values[0]
+        vuln = self.finding_records.get(finding_id)
+        if not vuln:
+            return
+
+        lines = []
+        lines.append(f"Severity: {self._normalize_severity(vuln)}")
+        for key in ("cve", "type", "description", "path", "port", "server"):
+            if vuln.get(key) is not None:
+                lines.append(f"{key}: {vuln.get(key)}")
+        for key, value in vuln.items():
+            if key not in {"cve", "type", "description", "path", "port", "server", "severity"}:
+                lines.append(f"{key}: {value}")
+
+        self._set_details(f"Finding {finding_id}", lines)
+
+    def _on_service_selected(self, _event):
+        selected = self.services_tree.selection()
+        if not selected:
+            return
+        values = self.services_tree.item(selected[0], "values")
+        if not values:
+            return
+        port, service = values[0], values[1]
+        self._set_details("Service Context", [f"Port: {port}", f"Service: {service}"])
+
+    def _on_action_selected(self, _event):
+        selected = self.action_tree.selection()
+        if not selected:
+            return
+        values = self.action_tree.item(selected[0], "values")
+        if not values:
+            return
+        timestamp, action = values[0], values[1]
+        self._set_details("Action Timeline Entry", [f"Time: {timestamp}", f"Action: {action}"])
+
+    def _set_details(self, title, lines):
+        self.details_text.config(state="normal")
+        self.details_text.delete("1.0", "end")
+        self.details_text.insert("end", title + "\n")
+        self.details_text.insert("end", "-" * len(title) + "\n\n")
+        for line in lines:
+            self.details_text.insert("end", str(line) + "\n")
+        self.details_text.config(state="disabled")
 
     def open_report(self):
         target = self.target_var.get().strip()
@@ -379,7 +688,7 @@ class AARTF_GUI:
         finally:
             if self.current_state:
                 self.phase_var.set(f"Phase: {self.current_state.phase}")
-            self.root.after(100, self._drain_log_queue)
+            self.root.after(120, self._drain_log_queue)
 
 
 if __name__ == "__main__":
