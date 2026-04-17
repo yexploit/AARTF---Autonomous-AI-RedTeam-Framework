@@ -25,19 +25,20 @@ class AttackTimeline:
         if isinstance(target, dict):
             target = target.get("ip")
 
-        self.steps = [target, "Recon"]
+        self.steps = [target, "Reconnaissance", "Enumeration", "Correlation"]
 
-        services = self.state.network.get("open_ports", {})
-        for port, service in services.items():
-            self.steps.append(f"{service}:{port}")
+        services = self.state.services_detail
+        for port, service in sorted(services.items(), key=lambda item: int(item[0])):
+            self.steps.append(f"{service.get('service', 'unknown')}:{port}")
 
-        for vuln in self.state.network.get("vulnerabilities", []):
-            label = vuln.get("type") or vuln.get("cve") or "UnknownVuln"
+        for vuln in self.state.findings[:6]:
+            label = vuln.get("title") or vuln.get("type") or "UnknownFinding"
             self.steps.append(label)
 
-        attack_plan = getattr(self.state, "attack_plan", {})
-        if attack_plan and attack_plan.get("best_path"):
-            self.steps.append(attack_plan.get("best_path"))
+        if self.state.attack_paths:
+            self.steps.append(self.state.attack_paths[0]["title"])
+        if self.state.walkthrough:
+            self.steps.append("LearnerWalkthrough")
 
         self.steps.append("Report")
         self.positions = {step: (idx, 0) for idx, step in enumerate(self.steps)}

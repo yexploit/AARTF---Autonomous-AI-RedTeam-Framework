@@ -11,6 +11,7 @@ class AttackGraph:
         "SERVICE": "#ffd24d",
         "VULN": "#ff944d",
         "ATTACK": "#66ff66",
+        "GUIDE": "#7bdcb5",
         "REPORT": "#cc66ff",
     }
 
@@ -25,7 +26,6 @@ class AttackGraph:
         self.node_colors = []
 
     def build(self):
-
         self.graph.clear()
         self.positions.clear()
         self.node_colors.clear()
@@ -45,13 +45,12 @@ class AttackGraph:
 
         self.graph.add_edge(target, "Reconnaissance")
 
-        services = self.state.network.get("open_ports", {})
+        services = self.state.services_detail
 
         y_services = y - 1
 
-        for port, service in services.items():
-
-            label = f"{service.upper()} ({port})"
+        for port, service in sorted(services.items(), key=lambda item: int(item[0])):
+            label = f"{service.get('service', 'unknown').upper()} ({port})"
 
             self.add_node(label, "SERVICE", 2, y_services)
 
@@ -59,33 +58,42 @@ class AttackGraph:
 
             y_services -= 1
 
-        vulns = self.state.network.get("vulnerabilities", [])
+        vulns = self.state.findings
 
         y_vuln = y_services - 1
 
-        for vuln in vulns:
-
-            label = vuln.get("type")
+        for vuln in vulns[:8]:
+            label = vuln.get("title") or vuln.get("type")
 
             self.add_node(label, "VULN", 3, y_vuln)
 
-            self.graph.add_edge("Reconnaissance", label)
+            service_port = vuln.get("affected_port")
+            if service_port and service_port in services:
+                self.graph.add_edge(f"{services[service_port].get('service', 'unknown').upper()} ({service_port})", label)
+            else:
+                self.graph.add_edge("Reconnaissance", label)
 
             y_vuln -= 1
 
-        attack_plan = getattr(self.state, "attack_plan", {})
-
-        if attack_plan and attack_plan.get("best_path"):
-
-            label = attack_plan.get("best_path")
-
+        for attack_path in self.state.attack_paths[:5]:
+            label = attack_path.get("title")
             self.add_node(label, "ATTACK", 4, y_vuln)
-
-            self.graph.add_edge("Reconnaissance", label)
-
+            for source in attack_path.get("source_findings", [])[:2]:
+                finding = next((item for item in self.state.findings if item["id"] == source), None)
+                if finding:
+                    self.graph.add_edge(finding.get("title"), label)
+            if not attack_path.get("source_findings"):
+                self.graph.add_edge("Reconnaissance", label)
             y_vuln -= 1
 
-        self.add_node("Report Generated", "REPORT", 5, y_vuln)
+        if self.state.walkthrough:
+            guide_label = "Learner Walkthrough"
+            self.add_node(guide_label, "GUIDE", 5, y_vuln)
+            if self.state.attack_paths:
+                self.graph.add_edge(self.state.attack_paths[0]["title"], guide_label)
+            y_vuln -= 1
+
+        self.add_node("Report Generated", "REPORT", 6, y_vuln)
 
     def add_node(self, label, node_type, x, y):
 
@@ -130,7 +138,8 @@ class AttackGraph:
         if isinstance(target, dict):
             target = target.get("ip")
 
-        filename = f"reports/attack_graph_{target}.png"
+        safe_target = str(target).replace(".", "_").replace("/", "_")
+        filename = f"reports/attack_graph_{safe_target}.png"
 
         plt.figure(figsize=(14, 8))
 

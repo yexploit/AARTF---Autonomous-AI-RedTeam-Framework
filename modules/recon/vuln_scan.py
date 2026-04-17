@@ -6,37 +6,24 @@ class VulnerabilityScanModule:
     NAME = "vulnerability_scan"
 
     def discover(self, state):
-
-        if state.phase == "RECON":
-
+        if state.phase == "VULNERABILITY_CORRELATION":
             return [{
                 "name": self.NAME
             }]
-
         return []
 
     def execute(self, state):
-
         print("[*] Scanning for vulnerabilities...")
-
-        services = state.network.get("services", {})
-
         db = CVEDatabase()
-
-        vulns = db.find_cves(services)
-
-        state.network["vulnerabilities"] = vulns
-
-        if vulns:
-
+        findings = db.correlate(state)
+        if findings:
             print("[+] Vulnerabilities found:")
-
-            for v in vulns:
-
-                print(f"   {v['cve']} ({v['severity']})")
-
+            for finding in findings:
+                state.add_finding(finding)
+                print(f"   {finding['title']} ({finding['severity']})")
         else:
-
             print("[!] No vulnerabilities found")
-
-        return True
+        return {
+            "success": True,
+            "summary": f"Correlated {len(findings)} service-driven risks",
+        }

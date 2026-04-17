@@ -45,6 +45,7 @@ class AARTF_GUI:
         self.scan_thread = None
         self.log_queue = Queue()
         self.finding_records = {}
+        self.path_records = {}
 
         self.persistence_var = tk.StringVar(value="MANUAL")
         self.report_after_run_var = tk.BooleanVar(value=True)
@@ -53,6 +54,8 @@ class AARTF_GUI:
         self.last_run_var = tk.StringVar(value="Last run: never")
         self.phase_var = tk.StringVar(value="Phase: -")
         self.target_info_var = tk.StringVar(value="-")
+        self.ai_status_var = tk.StringVar(value="AI: rules")
+        self.risk_var = tk.StringVar(value="Risk: INFO")
         self.assets_var = tk.StringVar(value="0")
         self.ports_var = tk.StringVar(value="0")
         self.vulns_var = tk.StringVar(value="0")
@@ -182,7 +185,7 @@ class AARTF_GUI:
         ttk.Label(title_block, text="Unified Threat Dashboard", style="HeaderTitle.TLabel").pack(anchor="w")
         ttk.Label(
             title_block,
-            text="Nessus-inspired experience for findings triage and run telemetry.",
+            text="AI-guided learner workflow for lab target analysis and attack-path planning.",
             style="HeaderSub.TLabel",
         ).pack(anchor="w", pady=(2, 8))
 
@@ -214,6 +217,7 @@ class AARTF_GUI:
         ttk.Button(action_bar, text="Refresh", command=self.refresh_results).pack(side="left", padx=4)
         ttk.Button(action_bar, text="Open Report", command=self.open_report).pack(side="left", padx=4)
         ttk.Button(action_bar, text="Reports Folder", command=self.open_reports_folder).pack(side="left", padx=4)
+        ttk.Label(action_bar, textvariable=self.ai_status_var, style="HeaderSub.TLabel").pack(side="left", padx=(12, 0))
 
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
         self.progress.grid(row=1, column=0, sticky="ew", padx=2, pady=(2, 12))
@@ -253,16 +257,19 @@ class AARTF_GUI:
         findings_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
         services_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
         activity_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
+        paths_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
         console_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
 
         self.main_notebook.add(findings_tab, text="Findings")
         self.main_notebook.add(services_tab, text="Services")
         self.main_notebook.add(activity_tab, text="Activity")
+        self.main_notebook.add(paths_tab, text="Attack Paths")
         self.main_notebook.add(console_tab, text="Live Console")
 
         self._build_findings_table(findings_tab)
         self._build_services_table(services_tab)
         self._build_activity_table(activity_tab)
+        self._build_paths_table(paths_tab)
         self._build_console(console_tab)
         self._build_right_panel(right_panel)
 
@@ -308,6 +315,22 @@ class AARTF_GUI:
         self.action_tree.column("action", width=700, anchor="w")
         self.action_tree.pack(fill="both", expand=True)
         self.action_tree.bind("<<TreeviewSelect>>", self._on_action_selected)
+
+    def _build_paths_table(self, parent):
+        ttk.Label(parent, text="AI-Prioritized Attack Paths", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+        self.paths_tree = ttk.Treeview(parent, columns=("id", "kind", "severity", "score", "title"), show="headings")
+        self.paths_tree.heading("id", text="ID")
+        self.paths_tree.heading("kind", text="Kind")
+        self.paths_tree.heading("severity", text="Severity")
+        self.paths_tree.heading("score", text="Score")
+        self.paths_tree.heading("title", text="Path")
+        self.paths_tree.column("id", width=90, anchor="center")
+        self.paths_tree.column("kind", width=110, anchor="center")
+        self.paths_tree.column("severity", width=100, anchor="center")
+        self.paths_tree.column("score", width=80, anchor="center")
+        self.paths_tree.column("title", width=550, anchor="w")
+        self.paths_tree.pack(fill="both", expand=True)
+        self.paths_tree.bind("<<TreeviewSelect>>", self._on_path_selected)
 
     def _build_console(self, parent):
         ttk.Label(parent, text="Live Operator Console", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
@@ -362,13 +385,14 @@ class AARTF_GUI:
         guidance.grid(row=2, column=0, sticky="ew", pady=(8, 0))
         ttk.Label(guidance, text="Run Intelligence", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
         ttk.Label(guidance, textvariable=self.target_info_var, style="Caption.TLabel").pack(anchor="w", pady=(0, 4))
+        ttk.Label(guidance, textvariable=self.risk_var, style="Caption.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Label(
             guidance,
             style="Caption.TLabel",
             justify="left",
             text=(
                 "- Start a run with a valid IP or CIDR target.\n"
-                "- Select any finding for full context and metadata.\n"
+                "- Select findings or attack paths for learner guidance.\n"
                 "- Refresh to sync UI with the latest in-memory state.\n"
                 "- Reports and graph assets are available after execution."
             ),
@@ -471,22 +495,44 @@ class AARTF_GUI:
         self.phase_var.set(f"Phase: {state.phase}")
         target_text = state.target.get("ip", "-")
         self.target_info_var.set(f"Target: {target_text}")
+        self.ai_status_var.set(
+            f"AI: {state.ai_status.get('mode', 'rules')} ({'enabled' if state.ai_status.get('available') else 'fallback'})"
+        )
         self.assets_var.set(str(self._estimate_asset_count(target_text)))
 
-        services = state.network.get("services", {}) or {}
-        vulns = state.network.get("vulnerabilities", []) or []
-        actions = getattr(state, "actions_taken", []) or []
+        services = state.services_detail or {}
+        vulns = state.findings or []
+        actions = getattr(state, "action_log", []) or []
 
         self.ports_var.set(str(len(services)))
         self.vulns_var.set(str(len(vulns)))
         self.actions_var.set(str(len(actions)))
 
+        state.finalize_assessment()
+        self.risk_var.set(f"Risk: {state.assessment['risk_rating']} ({state.assessment['risk_score']}/100)")
         self._update_severity_metrics(vulns)
-        self._replace_tree_rows(self.services_tree, [(str(p), str(s)) for p, s in services.items()])
+        self._replace_tree_rows(
+            self.services_tree,
+            [
+                (
+                    str(port),
+                    " ".join(
+                        part for part in [service.get("service"), service.get("product"), service.get("version")] if part
+                    ) or "unknown",
+                )
+                for port, service in services.items()
+            ],
+        )
         self._populate_findings(vulns)
+        self._populate_paths(state.attack_paths)
 
-        now = datetime.now().strftime("%H:%M:%S")
-        action_rows = [(now, str(action)) for action in actions]
+        action_rows = [
+            (
+                entry.get("timestamp", "")[11:19],
+                f"{entry.get('phase')} | {entry.get('action')} | {entry.get('status')}",
+            )
+            for entry in actions
+        ]
         self._replace_tree_rows(self.action_tree, action_rows)
 
     def _estimate_asset_count(self, target):
@@ -526,9 +572,9 @@ class AARTF_GUI:
             self.findings_tree.delete(item)
 
         for idx, vuln in enumerate(vulnerabilities, start=1):
-            finding_id = f"F-{idx:03d}"
+            finding_id = str(vuln.get("id") or f"F-{idx:03d}")
             severity = self._normalize_severity(vuln)
-            title = str(vuln.get("cve") or vuln.get("type") or vuln.get("description") or "Unclassified finding")
+            title = str(vuln.get("title") or vuln.get("cve") or vuln.get("type") or vuln.get("description") or "Unclassified finding")
             evidence = self._build_evidence(vuln)
             self.findings_tree.insert(
                 "",
@@ -548,6 +594,10 @@ class AARTF_GUI:
 
     def _build_evidence(self, vulnerability):
         tokens = []
+        if vulnerability.get("affected_service"):
+            tokens.append(f"service={vulnerability.get('affected_service')}")
+        if vulnerability.get("affected_port"):
+            tokens.append(f"port={vulnerability.get('affected_port')}")
         if vulnerability.get("path"):
             tokens.append(f"path={vulnerability.get('path')}")
         if vulnerability.get("port"):
@@ -560,6 +610,22 @@ class AARTF_GUI:
             tokens.append("No evidence string supplied")
         return " | ".join(str(token) for token in tokens)
 
+    def _populate_paths(self, attack_paths):
+        self.path_records.clear()
+        for item in self.paths_tree.get_children():
+            self.paths_tree.delete(item)
+        for attack_path in attack_paths or []:
+            self.paths_tree.insert(
+                "",
+                "end",
+                values=(attack_path["id"], attack_path.get("path_kind", "supporting"), attack_path["severity"], attack_path["score"], attack_path["title"]),
+            )
+            self.path_records[attack_path["id"]] = attack_path
+        if attack_paths:
+            first = self.paths_tree.get_children()[0]
+            self.paths_tree.selection_set(first)
+            self.paths_tree.focus(first)
+
     def _replace_tree_rows(self, tree, rows):
         for item in tree.get_children():
             tree.delete(item)
@@ -570,7 +636,10 @@ class AARTF_GUI:
         self._replace_tree_rows(self.services_tree, [])
         self._replace_tree_rows(self.findings_tree, [])
         self._replace_tree_rows(self.action_tree, [])
+        if hasattr(self, "paths_tree"):
+            self._replace_tree_rows(self.paths_tree, [])
         self.finding_records.clear()
+        self.path_records.clear()
         self.assets_var.set("0")
         self.ports_var.set("0")
         self.vulns_var.set("0")
@@ -580,6 +649,7 @@ class AARTF_GUI:
         self.medium_var.set("0")
         self.low_var.set("0")
         self.info_var.set("0")
+        self.risk_var.set("Risk: INFO")
         self._set_details("Awaiting session", ["Start a run to populate findings and contextual details."])
 
     def _on_finding_selected(self, _event):
@@ -596,11 +666,19 @@ class AARTF_GUI:
 
         lines = []
         lines.append(f"Severity: {self._normalize_severity(vuln)}")
-        for key in ("cve", "type", "description", "path", "port", "server"):
+        if vuln.get("confidence") is not None:
+            lines.append(f"confidence: {vuln.get('confidence')}")
+        for key in ("cve", "type", "description", "path", "port", "server", "affected_service", "affected_port"):
             if vuln.get(key) is not None:
                 lines.append(f"{key}: {vuln.get(key)}")
+        for field in ("attack_opportunities", "verification_steps", "remediation", "references"):
+            values = vuln.get(field)
+            if values:
+                lines.append(f"{field}:")
+                for value in values[:5]:
+                    lines.append(f"  - {value}")
         for key, value in vuln.items():
-            if key not in {"cve", "type", "description", "path", "port", "server", "severity"}:
+            if key not in {"cve", "type", "description", "path", "port", "server", "severity", "affected_service", "affected_port", "confidence", "attack_opportunities", "verification_steps", "remediation", "references"}:
                 lines.append(f"{key}: {value}")
 
         self._set_details(f"Finding {finding_id}", lines)
@@ -613,7 +691,20 @@ class AARTF_GUI:
         if not values:
             return
         port, service = values[0], values[1]
-        self._set_details("Service Context", [f"Port: {port}", f"Service: {service}"])
+        details = [f"Port: {port}", f"Service: {service}"]
+        if self.current_state and port in self.current_state.services_detail:
+            for key, value in self.current_state.services_detail[port].items():
+                if value is not None:
+                    details.append(f"{key}: {value}")
+        if self.current_state:
+            observations = self.current_state.attack_surface.get("protocol_observations", {})
+            if port in observations:
+                details.append("protocol_observation:")
+                details.append(f"  summary: {observations[port].get('summary')}")
+                raw_value = observations[port].get("raw")
+                if raw_value:
+                    details.append(f"  raw: {raw_value}")
+        self._set_details("Service Context", details)
 
     def _on_action_selected(self, _event):
         selected = self.action_tree.selection()
@@ -624,6 +715,33 @@ class AARTF_GUI:
             return
         timestamp, action = values[0], values[1]
         self._set_details("Action Timeline Entry", [f"Time: {timestamp}", f"Action: {action}"])
+
+    def _on_path_selected(self, _event):
+        selected = self.paths_tree.selection()
+        if not selected:
+            return
+        values = self.paths_tree.item(selected[0], "values")
+        if not values:
+            return
+        path_id = values[0]
+        attack_path = self.path_records.get(path_id)
+        if not attack_path:
+            return
+        lines = [
+            f"Severity: {attack_path.get('severity')}",
+            f"Score: {attack_path.get('score')}",
+            f"Confidence: {attack_path.get('confidence')}",
+            f"Summary: {attack_path.get('summary')}",
+        ]
+        for field in ("prerequisites", "steps", "blockers", "evidence", "source_findings"):
+            values = attack_path.get(field)
+            if values:
+                lines.append(f"{field}:")
+                for value in values:
+                    lines.append(f"  - {value}")
+        if attack_path.get("next_action"):
+            lines.append(f"next_action: {attack_path.get('next_action')}")
+        self._set_details(f"Attack Path {path_id}", lines)
 
     def _set_details(self, title, lines):
         self.details_text.config(state="normal")

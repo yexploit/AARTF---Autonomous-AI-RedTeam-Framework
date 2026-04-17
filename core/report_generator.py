@@ -43,129 +43,127 @@ class ReportGenerator:
     # =============================
 
     def build_report(self):
-
-        report = ""
-
-        # Header
-        report += "=====================================\n"
-        report += " AUTONOMOUS AI RED TEAM REPORT\n"
-        report += "=====================================\n"
-
-        report += f"\nGenerated: {datetime.datetime.now()}\n"
-
-        report += f"Target: {self.target}\n"
-
-        report += f"Final Phase: {self.state.phase}\n"
-
-        # =============================
-        # Open Ports
-        # =============================
-
-        report += "\n-------------------------------------\n"
-        report += "OPEN PORTS\n"
-        report += "-------------------------------------\n"
-
-        open_ports = self.state.network.get("open_ports", {})
-
-        if open_ports:
-            for port, service in open_ports.items():
-                report += f"Port {port}: {service}\n"
+        self.state.finalize_assessment()
+        lines = []
+        lines.append("=====================================")
+        lines.append(" AARTF ADVISORY ASSESSMENT REPORT")
+        lines.append("=====================================")
+        lines.append(f"Generated: {datetime.datetime.now()}")
+        lines.append(f"Target: {self.target}")
+        lines.append(f"Final Phase: {self.state.phase}")
+        lines.append(f"AI Mode: {self.state.ai_status.get('mode')} ({self.state.ai_status.get('detail')})")
+        lines.append("")
+        lines.append("EXECUTIVE SUMMARY")
+        lines.append("-------------------------------------")
+        lines.append(self.state.executive_summary or "Assessment completed.")
+        lines.append(f"Overall Risk: {self.state.assessment['risk_rating']} ({self.state.assessment['risk_score']}/100)")
+        lines.append(f"Average Confidence: {self.state.assessment['confidence']}")
+        lines.append("")
+        lines.append("TARGET PROFILE")
+        lines.append("-------------------------------------")
+        lines.append(f"Host: {self.target}")
+        lines.append(f"OS Hint: {self.state.target.get('os', 'unknown')}")
+        coverage = ", ".join(self.state.assessment.get("kill_chain_coverage", [])) or "None"
+        lines.append(f"Kill-Chain Coverage: {coverage}")
+        lines.append("")
+        lines.append("SERVICE INVENTORY")
+        lines.append("-------------------------------------")
+        if self.state.services_detail:
+            for port, service in sorted(self.state.services_detail.items(), key=lambda item: int(item[0])):
+                details = ", ".join(
+                    part for part in [service.get("service"), service.get("product"), service.get("version"), service.get("extrainfo")] if part
+                )
+                lines.append(f"Port {port}: {details or 'unknown'}")
         else:
-            report += "No open ports detected\n"
+            lines.append("No services identified")
 
-        # =============================
-        # Services
-        # =============================
-
-        report += "\n-------------------------------------\n"
-        report += "SERVICES\n"
-        report += "-------------------------------------\n"
-
-        services = self.state.network.get("services", {})
-
-        if services:
-            for port, service in services.items():
-                report += f"{port}: {service}\n"
+        protocol_observations = self.state.attack_surface.get("protocol_observations", {})
+        lines.append("")
+        lines.append("PROTOCOL OBSERVATIONS")
+        lines.append("-------------------------------------")
+        if protocol_observations:
+            for port, observation in sorted(protocol_observations.items(), key=lambda item: int(item[0])):
+                lines.append(f"Port {port} [{observation.get('label', 'unknown')}]: {observation.get('summary', '')}")
         else:
-            report += "No services identified\n"
+            lines.append("No protocol-specific observations captured")
 
-        # =============================
-        # Vulnerabilities
-        # =============================
-
-        report += "\n-------------------------------------\n"
-        report += "VULNERABILITIES\n"
-        report += "-------------------------------------\n"
-
-        vulnerabilities = self.state.network.get("vulnerabilities", [])
-
-        if vulnerabilities:
-
-            for vuln in vulnerabilities:
-
-                cve = vuln.get("cve", "Unknown CVE")
-                severity = vuln.get("severity", "Unknown")
-
-                report += f"{cve} ({severity})\n"
-
+        lines.append("")
+        lines.append("NORMALIZED FINDINGS")
+        lines.append("-------------------------------------")
+        if self.state.findings:
+            for finding in self.state.findings:
+                lines.append(f"[{finding['severity']}] {finding['title']} (confidence {finding['confidence']})")
+                if finding.get("summary"):
+                    lines.append(f"  Summary: {finding['summary']}")
+                if finding.get("evidence"):
+                    lines.append(f"  Evidence: {' | '.join(finding['evidence'][:3])}")
+                if finding.get("attack_opportunities"):
+                    lines.append(f"  Path Ideas: {' | '.join(finding['attack_opportunities'][:2])}")
+                if finding.get("remediation"):
+                    lines.append(f"  Remediation: {' | '.join(finding['remediation'][:2])}")
         else:
+            lines.append("No findings detected")
 
-            report += "No vulnerabilities detected\n"
-
-        # =============================
-        # Actions Taken
-        # =============================
-
-        report += "\n-------------------------------------\n"
-        report += "ATTACK ACTIONS EXECUTED\n"
-        report += "-------------------------------------\n"
-
-        if hasattr(self.state, "actions_taken") and self.state.actions_taken:
-
-            for action in self.state.actions_taken:
-
-                report += f"{action}\n"
-
+        lines.append("")
+        lines.append("PRIORITIZED ATTACK PATHS")
+        lines.append("-------------------------------------")
+        if self.state.attack_paths:
+            for bucket in ("primary", "alternate", "supporting"):
+                bucket_paths = [path for path in self.state.attack_paths if path.get("path_kind", "supporting") == bucket]
+                if not bucket_paths:
+                    continue
+                lines.append(f"{bucket.upper()} PATHS")
+                for path in bucket_paths[:5]:
+                    lines.append(f"{path['title']} [{path['severity']}] score={path['score']} confidence={path['confidence']}")
+                    if path.get("summary"):
+                        lines.append(f"  Why: {path['summary']}")
+                    if path.get("steps"):
+                        lines.append(f"  Steps: {' -> '.join(path['steps'][:4])}")
+                    if path.get("blockers"):
+                        lines.append(f"  Blockers: {' | '.join(path['blockers'][:2])}")
+                    if path.get("next_action"):
+                        lines.append(f"  Best Next Action: {path['next_action']}")
         else:
+            lines.append("No prioritized attack paths were generated")
 
-            report += "No actions recorded\n"
-
-        # =============================
-        # Session Data (POST EXPLOITATION)
-        # =============================
-
-        report += "\n-------------------------------------\n"
-        report += "POST-EXPLOITATION SESSION DATA\n"
-        report += "-------------------------------------\n"
-
-        if hasattr(self.state, "session_data") and self.state.session_data:
-
-            for cmd, output in self.state.session_data.items():
-
-                report += f"\nCommand: {cmd}\n"
-
-                report += "Output:\n"
-
-                report += f"{output}\n"
-
+        lines.append("")
+        lines.append("LEARNER WALKTHROUGH")
+        lines.append("-------------------------------------")
+        walkthrough = self.state.walkthrough or []
+        if walkthrough:
+            for idx, step in enumerate(walkthrough, start=1):
+                lines.append(f"{idx}. {step}")
         else:
+            lines.append("No walkthrough available")
 
-            report += "No session interaction data available\n"
+        lines.append("")
+        lines.append("LEARNER NOTES")
+        lines.append("-------------------------------------")
+        if self.state.learning_notes:
+            for note in self.state.learning_notes:
+                lines.append(f"{note['title']}: {note['details']}")
+        else:
+            lines.append("No learner notes recorded")
 
-        # =============================
-        # Compromise Status
-        # =============================
+        lines.append("")
+        lines.append("RECOMMENDATIONS")
+        lines.append("-------------------------------------")
+        if self.state.recommendations:
+            for rec in self.state.recommendations:
+                lines.append(f"[{rec['priority']}] {rec['title']}: {rec['details']}")
+        else:
+            lines.append("No recommendations recorded")
 
-        report += "\n-------------------------------------\n"
-        report += "COMPROMISE STATUS\n"
-        report += "-------------------------------------\n"
+        lines.append("")
+        lines.append("ACTION LOG")
+        lines.append("-------------------------------------")
+        if self.state.action_log:
+            for entry in self.state.action_log:
+                lines.append(f"{entry['timestamp']} | {entry['phase']} | {entry['action']} | {entry['status']} | {entry['details']}")
+        else:
+            lines.append("No actions recorded")
 
-        report += f"Compromised: {self.state.compromised}\n"
-
-        report += f"Privilege Escalated: {self.state.escalated}\n"
-
-        report += "\n=====================================\n"
-        report += " END OF REPORT\n"
-        report += "=====================================\n"
-
-        return report
+        lines.append("")
+        lines.append("END OF REPORT")
+        lines.append("=====================================")
+        return "\n".join(lines) + "\n"
