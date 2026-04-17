@@ -23,12 +23,12 @@ class AttackGraph:
 
         self.positions = {}
 
-        self.node_colors = []
+        self.node_types = {}
 
     def build(self):
         self.graph.clear()
         self.positions.clear()
-        self.node_colors.clear()
+        self.node_types.clear()
 
         y = 0
 
@@ -96,12 +96,9 @@ class AttackGraph:
         self.add_node("Report Generated", "REPORT", 6, y_vuln)
 
     def add_node(self, label, node_type, x, y):
-
         self.graph.add_node(label)
-
         self.positions[label] = (x, y)
-
-        self.node_colors.append(self.COLORS[node_type])
+        self.node_types[label] = node_type
 
     def show(self):
 
@@ -113,7 +110,7 @@ class AttackGraph:
             self.graph,
             self.positions,
             with_labels=True,
-            node_color=self.node_colors,
+            node_color=self._resolve_node_colors(),
             node_size=3000,
             font_size=10,
             font_weight="bold",
@@ -147,7 +144,7 @@ class AttackGraph:
             self.graph,
             self.positions,
             with_labels=True,
-            node_color=self.node_colors,
+            node_color=self._resolve_node_colors(),
             node_size=3000,
             font_size=10,
             font_weight="bold",
@@ -163,3 +160,11 @@ class AttackGraph:
         plt.close()
 
         print(f"[+] Attack graph saved: {filename}")
+
+    def _resolve_node_colors(self):
+        # Build colors from current graph nodes to avoid x/y/c length mismatch
+        # when labels repeat and networkx deduplicates nodes.
+        return [
+            self.COLORS.get(self.node_types.get(node, "REPORT"), "#888888")
+            for node in self.graph.nodes()
+        ]

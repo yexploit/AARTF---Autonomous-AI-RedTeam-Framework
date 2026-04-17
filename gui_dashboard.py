@@ -46,6 +46,8 @@ class AARTF_GUI:
         self.log_queue = Queue()
         self.finding_records = {}
         self.path_records = {}
+        self._tab_fx_rect = None
+        self._tab_fx_anim = None
 
         self.persistence_var = tk.StringVar(value="MANUAL")
         self.report_after_run_var = tk.BooleanVar(value=True)
@@ -77,13 +79,14 @@ class AARTF_GUI:
         except Exception:
             pass
 
-        bg_app = "#070d1a"
-        bg_sidebar = "#0b1220"
-        bg_panel = "#111a2f"
-        bg_card = "#16233d"
-        text_primary = "#edf2ff"
-        text_muted = "#9db0cf"
-        accent = "#3b82f6"
+        bg_app = "#050813"
+        bg_sidebar = "#070f1f"
+        bg_panel = "#0d1730"
+        bg_card = "#121f3b"
+        text_primary = "#dff8ff"
+        text_muted = "#7da6c9"
+        accent = "#00d4ff"
+        accent_secondary = "#1aff8f"
 
         style.configure("App.TFrame", background=bg_app)
         style.configure("Sidebar.TFrame", background=bg_sidebar)
@@ -100,16 +103,16 @@ class AARTF_GUI:
         style.configure("Caption.TLabel", background=bg_card, foreground=text_muted, font=("Segoe UI", 9))
         style.configure("KPI.TLabel", background=bg_card, foreground=text_primary, font=("Segoe UI", 20, "bold"))
         style.configure("SeverityLabel.TLabel", background=bg_card, foreground=text_muted, font=("Segoe UI", 10))
-        style.configure("Status.TLabel", background=bg_panel, foreground="#93c5fd", font=("Segoe UI", 10, "bold"))
+        style.configure("Status.TLabel", background=bg_panel, foreground="#68e8ff", font=("Segoe UI", 10, "bold"))
 
         style.configure("TButton", padding=(10, 7), font=("Segoe UI", 9, "bold"))
         style.configure("Primary.TButton", padding=(12, 8), font=("Segoe UI", 9, "bold"))
-        style.map("Primary.TButton", background=[("!disabled", accent)], foreground=[("!disabled", "#ffffff")])
+        style.map("Primary.TButton", background=[("!disabled", accent)], foreground=[("!disabled", "#00101f")])
         style.configure("Nav.TButton", background=bg_sidebar, foreground=text_muted, relief="flat", padding=(10, 8))
         style.map(
             "Nav.TButton",
-            background=[("active", "#13213a"), ("pressed", "#1f335a")],
-            foreground=[("active", "#dbeafe"), ("pressed", "#ffffff")],
+            background=[("active", "#102341"), ("pressed", "#14305a")],
+            foreground=[("active", accent_secondary), ("pressed", "#ffffff")],
         )
 
         style.configure("TEntry", fieldbackground="#0f1729", foreground=text_primary, insertcolor=text_primary, bordercolor="#243a60")
@@ -117,7 +120,7 @@ class AARTF_GUI:
 
         style.configure("TNotebook", background=bg_panel, borderwidth=0)
         style.configure("TNotebook.Tab", font=("Segoe UI", 10, "bold"), padding=(14, 8))
-        style.map("TNotebook.Tab", background=[("selected", "#264981")], foreground=[("selected", "#ffffff")])
+        style.map("TNotebook.Tab", background=[("selected", "#103366")], foreground=[("selected", "#a8fff2")])
 
         style.configure(
             "Treeview",
@@ -128,8 +131,8 @@ class AARTF_GUI:
             rowheight=26,
             font=("Segoe UI", 9),
         )
-        style.configure("Treeview.Heading", background="#192741", foreground="#cddcff", font=("Segoe UI", 9, "bold"))
-        style.map("Treeview", background=[("selected", "#2f4f84")], foreground=[("selected", "#ffffff")])
+        style.configure("Treeview.Heading", background="#13294d", foreground="#b8f7ff", font=("Segoe UI", 9, "bold"))
+        style.map("Treeview", background=[("selected", "#184a7f")], foreground=[("selected", "#e8ffff")])
 
     def _build_layout(self):
         self.root.columnconfigure(1, weight=1)
@@ -151,7 +154,7 @@ class AARTF_GUI:
         self._build_status_bar(workspace)
 
     def _build_sidebar(self, parent):
-        parent.rowconfigure(7, weight=1)
+        parent.rowconfigure(8, weight=1)
 
         ttk.Label(parent, text="AARTF", style="Brand.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(parent, text="Security Operations Console", style="BrandSub.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 24))
@@ -165,15 +168,18 @@ class AARTF_GUI:
         ttk.Button(parent, text="Activity", style="Nav.TButton", command=lambda: self._switch_to_tab(2)).grid(
             row=4, column=0, sticky="ew", pady=3
         )
-        ttk.Button(parent, text="Live Console", style="Nav.TButton", command=lambda: self._switch_to_tab(3)).grid(
+        ttk.Button(parent, text="Attack Paths", style="Nav.TButton", command=lambda: self._switch_to_tab(3)).grid(
             row=5, column=0, sticky="ew", pady=3
         )
-        ttk.Button(parent, text="Attack Graph", style="Nav.TButton", command=self.show_graph).grid(row=6, column=0, sticky="ew", pady=3)
+        ttk.Button(parent, text="Live Console", style="Nav.TButton", command=lambda: self._switch_to_tab(4)).grid(
+            row=6, column=0, sticky="ew", pady=3
+        )
+        ttk.Button(parent, text="Attack Graph", style="Nav.TButton", command=self.show_graph).grid(row=7, column=0, sticky="ew", pady=3)
 
         footer = ttk.Frame(parent, style="Sidebar.TFrame")
-        footer.grid(row=8, column=0, sticky="sew")
-        ttk.Label(footer, text="Design language: enterprise SOC", style="BrandSub.TLabel").pack(anchor="w")
-        ttk.Label(footer, text="CLI workflow remains unchanged", style="BrandSub.TLabel").pack(anchor="w", pady=(2, 0))
+        footer.grid(row=9, column=0, sticky="sew")
+        ttk.Label(footer, text="Design language: cyber SOC", style="BrandSub.TLabel").pack(anchor="w")
+        ttk.Label(footer, text="Animated UX, lightweight runtime", style="BrandSub.TLabel").pack(anchor="w", pady=(2, 0))
 
     def _build_toolbar(self, parent):
         header = ttk.Frame(parent, style="Header.TFrame", padding=(16, 12))
@@ -249,10 +255,20 @@ class AARTF_GUI:
         body.add(right_panel, weight=2)
 
         left_panel.columnconfigure(0, weight=1)
-        left_panel.rowconfigure(0, weight=1)
+        left_panel.rowconfigure(1, weight=1)
+
+        self.tab_fx = tk.Canvas(
+            left_panel,
+            height=4,
+            bg="#0d1730",
+            bd=0,
+            highlightthickness=0,
+            relief="flat",
+        )
+        self.tab_fx.grid(row=0, column=0, sticky="ew", pady=(0, 2))
 
         self.main_notebook = ttk.Notebook(left_panel)
-        self.main_notebook.grid(row=0, column=0, sticky="nsew")
+        self.main_notebook.grid(row=1, column=0, sticky="nsew")
 
         findings_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
         services_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
@@ -272,6 +288,8 @@ class AARTF_GUI:
         self._build_paths_table(paths_tab)
         self._build_console(console_tab)
         self._build_right_panel(right_panel)
+        self.main_notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        self.root.after(60, self._init_tab_fx)
 
     def _build_findings_table(self, parent):
         ttk.Label(parent, text="Vulnerability Findings", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
@@ -423,6 +441,64 @@ class AARTF_GUI:
     def _switch_to_tab(self, index):
         if hasattr(self, "main_notebook"):
             self.main_notebook.select(index)
+
+    def _init_tab_fx(self):
+        if not hasattr(self, "main_notebook") or not hasattr(self, "tab_fx"):
+            return
+        try:
+            selected = self.main_notebook.index(self.main_notebook.select())
+            x, y, w, h = self.main_notebook.bbox(selected)
+        except Exception:
+            return
+        self.tab_fx.delete("all")
+        self._tab_fx_rect = self.tab_fx.create_rectangle(
+            x,
+            0,
+            x + max(20, w),
+            4,
+            fill="#00d4ff",
+            outline="",
+        )
+
+    def _on_tab_changed(self, _event):
+        if not hasattr(self, "main_notebook") or not hasattr(self, "tab_fx"):
+            return
+        try:
+            selected = self.main_notebook.index(self.main_notebook.select())
+            x, y, w, h = self.main_notebook.bbox(selected)
+        except Exception:
+            return
+
+        tab_name = self.main_notebook.tab(selected, "text")
+        self.status_var.set(f"Viewing {tab_name} view")
+        self._animate_tab_fx(x, max(20, w))
+
+    def _animate_tab_fx(self, target_x, target_w):
+        if self._tab_fx_rect is None:
+            self._init_tab_fx()
+            return
+        if self._tab_fx_anim is not None:
+            self.root.after_cancel(self._tab_fx_anim)
+            self._tab_fx_anim = None
+
+        x1, y1, x2, y2 = self.tab_fx.coords(self._tab_fx_rect)
+        current_x = x1
+        current_w = max(1, x2 - x1)
+
+        steps = 8
+        dx = (target_x - current_x) / steps
+        dw = (target_w - current_w) / steps
+
+        def _step(i=0, start_x=current_x, start_w=current_w):
+            nx = start_x + (dx * i)
+            nw = start_w + (dw * i)
+            self.tab_fx.coords(self._tab_fx_rect, nx, 0, nx + nw, 4)
+            if i < steps:
+                self._tab_fx_anim = self.root.after(12, lambda: _step(i + 1, start_x, start_w))
+            else:
+                self._tab_fx_anim = None
+
+        _step()
 
     def _validate_target(self, value):
         candidate = (value or "").strip()
