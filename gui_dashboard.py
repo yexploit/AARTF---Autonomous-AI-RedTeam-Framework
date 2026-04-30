@@ -35,10 +35,32 @@ class QueueWriter(io.TextIOBase):
 class AARTF_GUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("AARTF Security Center")
-        self.root.geometry("1360x820")
-        self.root.minsize(1220, 760)
-        self.root.configure(bg="#070d1a")
+        self.root.title("Autonomous AI-Driven Red-Team Framework")
+        self.root.geometry("1460x900")
+        self.root.minsize(1080, 700)
+        self.root.configure(bg="#060b14")
+
+        self.tokens = {
+            "bg_root": "#060b14",
+            "bg_sidebar": "#0a1323",
+            "bg_sidebar_elev": "#0d1a2f",
+            "bg_surface": "#0f1b2e",
+            "bg_surface_alt": "#131f35",
+            "bg_card": "#16233c",
+            "bg_input": "#0b1628",
+            "border_soft": "#213552",
+            "border_focus": "#2ec8ff",
+            "text_primary": "#e8f3ff",
+            "text_secondary": "#9fb6d3",
+            "text_muted": "#7f96b5",
+            "accent": "#24c8ff",
+            "accent_alt": "#2de2c6",
+            "critical": "#ff6a7a",
+            "high": "#ff9c5b",
+            "medium": "#f6c35f",
+            "low": "#4ddf9d",
+            "info": "#4fa7ff",
+        }
 
         self.running = False
         self.current_state = None
@@ -48,6 +70,10 @@ class AARTF_GUI:
         self.path_records = {}
         self._tab_fx_rect = None
         self._tab_fx_anim = None
+        self.sidebar_collapsed = False
+        self.nav_buttons = []
+        self.empty_states = {}
+        self.risk_bars = {}
 
         self.persistence_var = tk.StringVar(value="MANUAL")
         self.report_after_run_var = tk.BooleanVar(value=True)
@@ -79,71 +105,111 @@ class AARTF_GUI:
         except Exception:
             pass
 
-        bg_app = "#050813"
-        bg_sidebar = "#070f1f"
-        bg_panel = "#0d1730"
-        bg_card = "#121f3b"
-        text_primary = "#dff8ff"
-        text_muted = "#7da6c9"
-        accent = "#00d4ff"
-        accent_secondary = "#1aff8f"
+        t = self.tokens
+        style.configure("App.TFrame", background=t["bg_root"])
+        style.configure("Sidebar.TFrame", background=t["bg_sidebar"])
+        style.configure("Surface.TFrame", background=t["bg_surface"])
+        style.configure("SurfaceAlt.TFrame", background=t["bg_surface_alt"])
+        style.configure("Card.TFrame", background=t["bg_card"])
+        style.configure("HeaderCard.TFrame", background=t["bg_surface_alt"])
+        style.configure("Glass.TFrame", background=t["bg_input"])
 
-        style.configure("App.TFrame", background=bg_app)
-        style.configure("Sidebar.TFrame", background=bg_sidebar)
-        style.configure("Header.TFrame", background=bg_panel)
-        style.configure("Panel.TFrame", background=bg_panel)
-        style.configure("Card.TFrame", background=bg_card)
+        style.configure("Brand.TLabel", background=t["bg_sidebar"], foreground=t["text_primary"], font=("Segoe UI", 16, "bold"))
+        style.configure("BrandSub.TLabel", background=t["bg_sidebar"], foreground=t["text_muted"], font=("Segoe UI", 9))
+        style.configure("HeaderTitle.TLabel", background=t["bg_surface_alt"], foreground=t["text_primary"], font=("Segoe UI", 16, "bold"))
+        style.configure("HeaderSub.TLabel", background=t["bg_surface_alt"], foreground=t["text_secondary"], font=("Segoe UI", 10))
+        style.configure("Section.TLabel", background=t["bg_card"], foreground=t["text_primary"], font=("Segoe UI", 11, "bold"))
+        style.configure("Caption.TLabel", background=t["bg_card"], foreground=t["text_secondary"], font=("Segoe UI", 9))
+        style.configure("KPI.TLabel", background=t["bg_card"], foreground=t["text_primary"], font=("Segoe UI", 22, "bold"))
+        style.configure("Status.TLabel", background=t["bg_surface_alt"], foreground=t["accent"], font=("Segoe UI", 10, "bold"))
 
-        style.configure("Brand.TLabel", background=bg_sidebar, foreground=text_primary, font=("Segoe UI", 18, "bold"))
-        style.configure("BrandSub.TLabel", background=bg_sidebar, foreground=text_muted, font=("Segoe UI", 9))
+        style.configure("TCheckbutton", background=t["bg_surface_alt"], foreground=t["text_secondary"], font=("Segoe UI", 9))
+        style.map("TCheckbutton", foreground=[("active", t["text_primary"])])
 
-        style.configure("Section.TLabel", background=bg_panel, foreground=text_primary, font=("Segoe UI", 11, "bold"))
-        style.configure("HeaderTitle.TLabel", background=bg_panel, foreground=text_primary, font=("Segoe UI", 16, "bold"))
-        style.configure("HeaderSub.TLabel", background=bg_panel, foreground=text_muted, font=("Segoe UI", 10))
-        style.configure("Caption.TLabel", background=bg_card, foreground=text_muted, font=("Segoe UI", 9))
-        style.configure("KPI.TLabel", background=bg_card, foreground=text_primary, font=("Segoe UI", 20, "bold"))
-        style.configure("SeverityLabel.TLabel", background=bg_card, foreground=text_muted, font=("Segoe UI", 10))
-        style.configure("Status.TLabel", background=bg_panel, foreground="#68e8ff", font=("Segoe UI", 10, "bold"))
-
-        style.configure("TButton", padding=(10, 7), font=("Segoe UI", 9, "bold"))
-        style.configure("Primary.TButton", padding=(12, 8), font=("Segoe UI", 9, "bold"))
-        style.map("Primary.TButton", background=[("!disabled", accent)], foreground=[("!disabled", "#00101f")])
-        style.configure("Nav.TButton", background=bg_sidebar, foreground=text_muted, relief="flat", padding=(10, 8))
-        style.map(
-            "Nav.TButton",
-            background=[("active", "#102341"), ("pressed", "#14305a")],
-            foreground=[("active", accent_secondary), ("pressed", "#ffffff")],
+        style.configure(
+            "App.TEntry",
+            fieldbackground=t["bg_input"],
+            foreground=t["text_primary"],
+            insertcolor=t["text_primary"],
+            bordercolor=t["border_soft"],
+            lightcolor=t["border_soft"],
+            darkcolor=t["border_soft"],
+            padding=8,
+            relief="flat",
         )
+        style.map("App.TEntry", bordercolor=[("focus", t["border_focus"])], lightcolor=[("focus", t["border_focus"])])
+        style.configure(
+            "App.TCombobox",
+            fieldbackground=t["bg_input"],
+            foreground=t["text_primary"],
+            bordercolor=t["border_soft"],
+            lightcolor=t["border_soft"],
+            darkcolor=t["border_soft"],
+            arrowcolor=t["text_secondary"],
+            padding=6,
+            relief="flat",
+        )
+        style.map("App.TCombobox", bordercolor=[("focus", t["border_focus"])], lightcolor=[("focus", t["border_focus"])])
 
-        style.configure("TEntry", fieldbackground="#0f1729", foreground=text_primary, insertcolor=text_primary, bordercolor="#243a60")
-        style.configure("TCombobox", fieldbackground="#0f1729", foreground=text_primary, arrowcolor=text_primary, bordercolor="#243a60")
-
-        style.configure("TNotebook", background=bg_panel, borderwidth=0)
-        style.configure("TNotebook.Tab", font=("Segoe UI", 10, "bold"), padding=(14, 8))
-        style.map("TNotebook.Tab", background=[("selected", "#103366")], foreground=[("selected", "#a8fff2")])
+        style.configure(
+            "TNotebook",
+            background=t["bg_surface"],
+            borderwidth=0,
+            tabmargins=(0, 0, 0, 0),
+        )
+        style.configure(
+            "TNotebook.Tab",
+            font=("Segoe UI", 10, "bold"),
+            padding=(14, 9),
+            background=t["bg_surface"],
+            foreground=t["text_secondary"],
+            borderwidth=0,
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", t["bg_card"]), ("active", "#132743")],
+            foreground=[("selected", t["text_primary"]), ("active", t["accent"])],
+        )
 
         style.configure(
             "Treeview",
-            background="#0f1729",
-            foreground="#dbe8ff",
-            fieldbackground="#0f1729",
+            background=t["bg_input"],
+            foreground=t["text_primary"],
+            fieldbackground=t["bg_input"],
             borderwidth=0,
-            rowheight=26,
+            rowheight=30,
             font=("Segoe UI", 9),
+            relief="flat",
         )
-        style.configure("Treeview.Heading", background="#13294d", foreground="#b8f7ff", font=("Segoe UI", 9, "bold"))
-        style.map("Treeview", background=[("selected", "#184a7f")], foreground=[("selected", "#e8ffff")])
+        style.configure(
+            "Treeview.Heading",
+            background="#182c4a",
+            foreground=t["text_primary"],
+            font=("Segoe UI", 9, "bold"),
+            borderwidth=0,
+            relief="flat",
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", "#1f3e67")],
+            foreground=[("selected", t["text_primary"])],
+        )
+        style.map(
+            "Treeview.Heading",
+            background=[("active", "#1d375c")],
+            foreground=[("active", t["accent"])],
+        )
 
     def _build_layout(self):
         self.root.columnconfigure(1, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        sidebar = ttk.Frame(self.root, style="Sidebar.TFrame", width=240, padding=(18, 18))
-        sidebar.grid(row=0, column=0, sticky="ns")
-        sidebar.grid_propagate(False)
-        self._build_sidebar(sidebar)
+        self.sidebar = tk.Frame(self.root, bg=self.tokens["bg_sidebar"], width=248, highlightthickness=1, highlightbackground=self.tokens["border_soft"])
+        self.sidebar.grid(row=0, column=0, sticky="ns")
+        self.sidebar.grid_propagate(False)
+        self._build_sidebar(self.sidebar)
 
-        workspace = ttk.Frame(self.root, style="App.TFrame", padding=(14, 14))
+        workspace = ttk.Frame(self.root, style="App.TFrame", padding=(14, 14, 14, 10))
         workspace.grid(row=0, column=1, sticky="nsew")
         workspace.columnconfigure(0, weight=1)
         workspace.rowconfigure(2, weight=1)
@@ -154,127 +220,264 @@ class AARTF_GUI:
         self._build_status_bar(workspace)
 
     def _build_sidebar(self, parent):
-        parent.rowconfigure(8, weight=1)
+        for idx in range(11):
+            parent.rowconfigure(idx, weight=0)
+        parent.rowconfigure(9, weight=1)
+        parent.columnconfigure(0, weight=1)
 
-        ttk.Label(parent, text="AARTF", style="Brand.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(parent, text="Security Operations Console", style="BrandSub.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 24))
+        self.brand_row = tk.Frame(parent, bg=self.tokens["bg_sidebar"])
+        self.brand_row.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
+        self.brand_mark = tk.Canvas(self.brand_row, width=18, height=18, bg=self.tokens["bg_sidebar"], bd=0, highlightthickness=0)
+        self.brand_mark.create_oval(2, 2, 16, 16, fill=self.tokens["accent"], outline="")
+        self.brand_mark.pack(side="left", padx=(0, 8))
+        self.brand_name = ttk.Label(self.brand_row, text="AARTF", style="Brand.TLabel")
+        self.brand_name.pack(side="left", anchor="w")
 
-        ttk.Button(parent, text="Dashboard", style="Nav.TButton", command=lambda: self._switch_to_tab(0)).grid(
-            row=2, column=0, sticky="ew", pady=3
-        )
-        ttk.Button(parent, text="Services", style="Nav.TButton", command=lambda: self._switch_to_tab(1)).grid(
-            row=3, column=0, sticky="ew", pady=3
-        )
-        ttk.Button(parent, text="Activity", style="Nav.TButton", command=lambda: self._switch_to_tab(2)).grid(
-            row=4, column=0, sticky="ew", pady=3
-        )
-        ttk.Button(parent, text="Attack Paths", style="Nav.TButton", command=lambda: self._switch_to_tab(3)).grid(
-            row=5, column=0, sticky="ew", pady=3
-        )
-        ttk.Button(parent, text="Live Console", style="Nav.TButton", command=lambda: self._switch_to_tab(4)).grid(
-            row=6, column=0, sticky="ew", pady=3
-        )
-        ttk.Button(parent, text="Attack Graph", style="Nav.TButton", command=self.show_graph).grid(row=7, column=0, sticky="ew", pady=3)
+        self.toggle_button = self._make_nav_button(parent, "collapse", "< Collapse", self._toggle_sidebar)
+        self.toggle_button.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
 
-        footer = ttk.Frame(parent, style="Sidebar.TFrame")
-        footer.grid(row=9, column=0, sticky="sew")
-        ttk.Label(footer, text="Design language: cyber SOC", style="BrandSub.TLabel").pack(anchor="w")
-        ttk.Label(footer, text="Animated UX, lightweight runtime", style="BrandSub.TLabel").pack(anchor="w", pady=(2, 0))
+        nav_items = [
+            ("overview", "Overview", lambda: self._switch_to_tab(0)),
+            ("services", "Services", lambda: self._switch_to_tab(1)),
+            ("activity", "Activity", lambda: self._switch_to_tab(2)),
+            ("attack_paths", "Attack Paths", lambda: self._switch_to_tab(3)),
+            ("console", "Live Console", lambda: self._switch_to_tab(4)),
+            ("graph", "Attack Graph", self.show_graph),
+        ]
+        self.nav_map = {}
+        for row, (key, label, command) in enumerate(nav_items, start=2):
+            btn = self._make_nav_button(parent, key, label, command)
+            btn.grid(row=row, column=0, sticky="ew", padx=12, pady=4)
+            self.nav_map[key] = btn
+
+        self.sidebar_footer = ttk.Label(
+            parent,
+            text="Design: dark layered surfaces\nInteractions: fast and focused",
+            style="BrandSub.TLabel",
+            justify="left",
+        )
+        self.sidebar_footer.grid(row=10, column=0, sticky="sw", padx=18, pady=(0, 14))
+
+        self._set_nav_active("overview")
+
+    def _make_nav_button(self, parent, key, label, command):
+        btn = tk.Button(
+            parent,
+            text=f"  {label}",
+            font=("Segoe UI", 10, "bold"),
+            bg=self.tokens["bg_sidebar"],
+            fg=self.tokens["text_secondary"],
+            activebackground=self.tokens["bg_sidebar_elev"],
+            activeforeground=self.tokens["text_primary"],
+            bd=0,
+            relief="flat",
+            anchor="w",
+            padx=12,
+            pady=10,
+            command=lambda k=key, c=command: self._on_nav_click(k, c),
+        )
+        btn.bind("<Enter>", lambda _e, b=btn: self._nav_hover(b, True))
+        btn.bind("<Leave>", lambda _e, b=btn: self._nav_hover(b, False))
+        self.nav_buttons.append(btn)
+        return btn
+
+    def _nav_hover(self, button, entering):
+        if getattr(button, "_active_nav", False):
+            return
+        button.configure(bg=self.tokens["bg_sidebar_elev"] if entering else self.tokens["bg_sidebar"])
+
+    def _set_nav_active(self, key):
+        for k, btn in self.nav_map.items():
+            active = k == key
+            btn._active_nav = active
+            if active:
+                btn.configure(bg="#14263f", fg=self.tokens["accent"])
+            else:
+                btn.configure(bg=self.tokens["bg_sidebar"], fg=self.tokens["text_secondary"])
+
+    def _on_nav_click(self, key, command):
+        if key in {"overview", "services", "activity", "attack_paths", "console"}:
+            self._set_nav_active(key)
+        self._button_feedback(self.nav_map.get(key))
+        command()
+
+    def _toggle_sidebar(self):
+        self.sidebar_collapsed = not self.sidebar_collapsed
+        width = 84 if self.sidebar_collapsed else 248
+        self.sidebar.configure(width=width)
+
+        if self.sidebar_collapsed:
+            self.brand_name.pack_forget()
+            self.sidebar_footer.grid_remove()
+            self.toggle_button.configure(text="> Expand", anchor="center")
+            labels = {
+                "overview": "O",
+                "services": "S",
+                "activity": "A",
+                "attack_paths": "P",
+                "console": "C",
+                "graph": "G",
+            }
+            for key, btn in self.nav_map.items():
+                btn.configure(text=labels[key], anchor="center", padx=4)
+        else:
+            self.brand_name.pack(side="left", anchor="w")
+            self.sidebar_footer.grid()
+            self.toggle_button.configure(text="< Collapse", anchor="w")
+            labels = {
+                "overview": "  Overview",
+                "services": "  Services",
+                "activity": "  Activity",
+                "attack_paths": "  Attack Paths",
+                "console": "  Live Console",
+                "graph": "  Attack Graph",
+            }
+            for key, btn in self.nav_map.items():
+                btn.configure(text=labels[key], anchor="w", padx=12)
 
     def _build_toolbar(self, parent):
-        header = ttk.Frame(parent, style="Header.TFrame", padding=(16, 12))
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        header = ttk.Frame(parent, style="HeaderCard.TFrame", padding=(18, 14))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        header.columnconfigure(0, weight=1)
         header.columnconfigure(1, weight=1)
 
-        title_block = ttk.Frame(header, style="Header.TFrame")
-        title_block.grid(row=0, column=0, columnspan=2, sticky="w")
-        ttk.Label(title_block, text="Unified Threat Dashboard", style="HeaderTitle.TLabel").pack(anchor="w")
+        title_block = ttk.Frame(header, style="HeaderCard.TFrame")
+        title_block.grid(row=0, column=0, sticky="w")
+        ttk.Label(title_block, text="Unified Threat Command", style="HeaderTitle.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(
             title_block,
-            text="AI-guided learner workflow for lab target analysis and attack-path planning.",
+            text="Modern analyst cockpit for reconnaissance, risk triage, and guided attack-path validation.",
             style="HeaderSub.TLabel",
-        ).pack(anchor="w", pady=(2, 8))
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        controls = ttk.Frame(header, style="Header.TFrame")
-        controls.grid(row=1, column=0, sticky="ew")
+        status_chip = tk.Label(
+            header,
+            textvariable=self.ai_status_var,
+            bg="#133a4a",
+            fg="#9ff5e7",
+            font=("Segoe UI", 9, "bold"),
+            padx=10,
+            pady=4,
+        )
+        status_chip.grid(row=0, column=1, sticky="e")
+
+        controls = ttk.Frame(header, style="HeaderCard.TFrame")
+        controls.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        controls.columnconfigure(1, weight=1)
+        controls.columnconfigure(6, weight=1)
 
         ttk.Label(controls, text="Target", style="HeaderSub.TLabel").grid(row=0, column=0, sticky="w")
-        target_entry = ttk.Entry(controls, textvariable=self.target_var, width=36)
-        target_entry.grid(row=0, column=1, padx=(8, 12), sticky="w")
+        target_entry = ttk.Entry(controls, textvariable=self.target_var, style="App.TEntry")
+        target_entry.grid(row=0, column=1, sticky="ew", padx=(8, 14))
         target_entry.focus_set()
 
         ttk.Label(controls, text="Persistence", style="HeaderSub.TLabel").grid(row=0, column=2, sticky="w")
-        ttk.Combobox(
+        persistence = ttk.Combobox(
             controls,
             textvariable=self.persistence_var,
             values=["AUTO", "MANUAL", "OFF"],
-            width=10,
             state="readonly",
-        ).grid(row=0, column=3, padx=(8, 12), sticky="w")
-
-        ttk.Checkbutton(controls, text="Generate reports after run", variable=self.report_after_run_var).grid(
-            row=0, column=4, padx=(8, 0), sticky="w"
+            width=12,
+            style="App.TCombobox",
         )
+        persistence.grid(row=0, column=3, sticky="w", padx=(8, 14))
 
-        action_bar = ttk.Frame(header, style="Header.TFrame")
-        action_bar.grid(row=1, column=1, sticky="e")
-        self.start_button = ttk.Button(action_bar, text="Start Scan", style="Primary.TButton", command=self.start_scan)
+        reports_toggle = ttk.Checkbutton(controls, text="Generate reports", variable=self.report_after_run_var)
+        reports_toggle.grid(row=0, column=4, sticky="w", padx=(0, 16))
+
+        actions = ttk.Frame(controls, style="HeaderCard.TFrame")
+        actions.grid(row=0, column=6, sticky="e")
+        self.start_button = self._make_action_button(actions, "Start Scan", self.start_scan, True)
         self.start_button.pack(side="left", padx=(0, 8))
-        ttk.Button(action_bar, text="Refresh", command=self.refresh_results).pack(side="left", padx=4)
-        ttk.Button(action_bar, text="Open Report", command=self.open_report).pack(side="left", padx=4)
-        ttk.Button(action_bar, text="Reports Folder", command=self.open_reports_folder).pack(side="left", padx=4)
-        ttk.Label(action_bar, textvariable=self.ai_status_var, style="HeaderSub.TLabel").pack(side="left", padx=(12, 0))
+        self.refresh_button = self._make_action_button(actions, "Refresh", self.refresh_results)
+        self.refresh_button.pack(side="left", padx=(0, 8))
+        self.report_button = self._make_action_button(actions, "Doc  Report", self.open_report)
+        self.report_button.pack(side="left", padx=(0, 8))
+        self.folder_button = self._make_action_button(actions, "Folder  Reports", self.open_reports_folder)
+        self.folder_button.pack(side="left")
 
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
-        self.progress.grid(row=1, column=0, sticky="ew", padx=2, pady=(2, 12))
+        self.progress.grid(row=1, column=0, sticky="ew", padx=(2, 2), pady=(2, 12))
+
+    def _make_action_button(self, parent, text, command, primary=False):
+        bg = "#1d8eb8" if primary else "#1a2a43"
+        hover = "#29b5e7" if primary else "#223758"
+        fg = "#01131e" if primary else self.tokens["text_primary"]
+        button = tk.Button(
+            parent,
+            text=text,
+            command=lambda b=None: self._run_button_action(button, command),
+            bg=bg,
+            fg=fg,
+            activebackground=hover,
+            activeforeground=fg,
+            bd=0,
+            relief="flat",
+            font=("Segoe UI", 9, "bold"),
+            padx=12,
+            pady=8,
+        )
+        button._base_bg = bg
+        button._hover_bg = hover
+        button.bind("<Enter>", lambda _e, b=button: b.configure(bg=b._hover_bg))
+        button.bind("<Leave>", lambda _e, b=button: b.configure(bg=b._base_bg))
+        return button
+
+    def _run_button_action(self, button, command):
+        self._button_feedback(button)
+        command()
+
+    def _button_feedback(self, button):
+        if not button:
+            return
+        original = button.cget("bg")
+        button.configure(bg="#2b5377")
+        self.root.after(90, lambda: button.configure(bg=original))
 
     def _build_kpi_row(self, parent):
         cards = ttk.Frame(parent, style="App.TFrame")
-        cards.grid(row=2, column=0, sticky="ew", pady=(0, 10))
+        cards.grid(row=1, column=0, sticky="ew", pady=(0, 12))
         for i in range(4):
-            cards.columnconfigure(i, weight=1)
-
-        self._create_kpi_card(cards, 0, "Assets In Scope", self.assets_var)
-        self._create_kpi_card(cards, 1, "Open Services", self.ports_var)
-        self._create_kpi_card(cards, 2, "Findings", self.vulns_var)
-        self._create_kpi_card(cards, 3, "Actions Executed", self.actions_var)
+            cards.columnconfigure(i, weight=1, uniform="kpi")
+        self._create_kpi_card(cards, 0, "Assets in Scope", self.assets_var)
+        self._create_kpi_card(cards, 1, "Services Exposed", self.ports_var)
+        self._create_kpi_card(cards, 2, "Open Findings", self.vulns_var)
+        self._create_kpi_card(cards, 3, "Actions Logged", self.actions_var)
 
     def _create_kpi_card(self, parent, column, title, value_var):
-        card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
-        card.grid(row=0, column=column, sticky="nsew", padx=4)
+        card = ttk.Frame(parent, style="Card.TFrame", padding=(14, 12))
+        card.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 8, 0))
         ttk.Label(card, textvariable=value_var, style="KPI.TLabel").pack(anchor="w")
-        ttk.Label(card, text=title, style="Caption.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Label(card, text=title, style="Caption.TLabel").pack(anchor="w", pady=(3, 0))
 
     def _build_body(self, parent):
         body = ttk.Panedwindow(parent, orient="horizontal")
-        body.grid(row=3, column=0, sticky="nsew")
+        body.grid(row=2, column=0, sticky="nsew")
 
-        left_panel = ttk.Frame(body, style="Panel.TFrame", padding=(10, 10))
-        right_panel = ttk.Frame(body, style="Panel.TFrame", padding=(10, 10))
-        body.add(left_panel, weight=4)
-        body.add(right_panel, weight=2)
+        left_panel = ttk.Frame(body, style="Surface.TFrame", padding=(10, 10))
+        right_panel = ttk.Frame(body, style="Surface.TFrame", padding=(10, 10))
+        body.add(left_panel, weight=7)
+        body.add(right_panel, weight=4)
 
         left_panel.columnconfigure(0, weight=1)
         left_panel.rowconfigure(1, weight=1)
+        right_panel.columnconfigure(0, weight=1)
+        right_panel.rowconfigure(1, weight=1)
 
-        self.tab_fx = tk.Canvas(
-            left_panel,
-            height=4,
-            bg="#0d1730",
-            bd=0,
-            highlightthickness=0,
-            relief="flat",
-        )
+        self.tab_fx = tk.Canvas(left_panel, height=3, bg=self.tokens["bg_surface"], bd=0, highlightthickness=0, relief="flat")
         self.tab_fx.grid(row=0, column=0, sticky="ew", pady=(0, 2))
 
         self.main_notebook = ttk.Notebook(left_panel)
         self.main_notebook.grid(row=1, column=0, sticky="nsew")
 
-        findings_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
-        services_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
-        activity_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
-        paths_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
-        console_tab = ttk.Frame(self.main_notebook, style="Panel.TFrame", padding=(8, 8))
+        findings_tab = ttk.Frame(self.main_notebook, style="Surface.TFrame", padding=(8, 8))
+        services_tab = ttk.Frame(self.main_notebook, style="Surface.TFrame", padding=(8, 8))
+        activity_tab = ttk.Frame(self.main_notebook, style="Surface.TFrame", padding=(8, 8))
+        paths_tab = ttk.Frame(self.main_notebook, style="Surface.TFrame", padding=(8, 8))
+        console_tab = ttk.Frame(self.main_notebook, style="Surface.TFrame", padding=(8, 8))
+        for tab in (findings_tab, services_tab, activity_tab, paths_tab, console_tab):
+            tab.columnconfigure(0, weight=1)
+            tab.rowconfigure(1, weight=1)
 
         self.main_notebook.add(findings_tab, text="Findings")
         self.main_notebook.add(services_tab, text="Services")
@@ -289,54 +492,72 @@ class AARTF_GUI:
         self._build_console(console_tab)
         self._build_right_panel(right_panel)
         self.main_notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
-        self.root.after(60, self._init_tab_fx)
+        self.root.after(80, self._init_tab_fx)
+
+    def _build_tab_table_shell(self, parent, title):
+        card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 12))
+        card.grid(row=0, column=0, rowspan=2, sticky="nsew")
+        card.columnconfigure(0, weight=1)
+        card.rowconfigure(2, weight=1)
+        ttk.Label(card, text=title, style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(card, text="Live data updates with interactive triage context.", style="Caption.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 10))
+        table_wrap = ttk.Frame(card, style="Card.TFrame")
+        table_wrap.grid(row=2, column=0, sticky="nsew")
+        table_wrap.columnconfigure(0, weight=1)
+        table_wrap.rowconfigure(0, weight=1)
+        return table_wrap
 
     def _build_findings_table(self, parent):
-        ttk.Label(parent, text="Vulnerability Findings", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
-
+        table_wrap = self._build_tab_table_shell(parent, "Vulnerability Findings")
         columns = ("id", "severity", "title", "evidence")
-        self.findings_tree = ttk.Treeview(parent, columns=columns, show="headings")
+        self.findings_tree = ttk.Treeview(table_wrap, columns=columns, show="headings")
         self.findings_tree.heading("id", text="ID")
         self.findings_tree.heading("severity", text="Severity")
         self.findings_tree.heading("title", text="Title")
         self.findings_tree.heading("evidence", text="Evidence")
-
-        self.findings_tree.column("id", width=90, anchor="center")
-        self.findings_tree.column("severity", width=100, anchor="center")
-        self.findings_tree.column("title", width=340, anchor="w")
-        self.findings_tree.column("evidence", width=380, anchor="w")
-        self.findings_tree.pack(fill="both", expand=True)
+        self.findings_tree.column("id", width=100, anchor="center")
+        self.findings_tree.column("severity", width=110, anchor="center")
+        self.findings_tree.column("title", width=360, anchor="w")
+        self.findings_tree.column("evidence", width=440, anchor="w")
+        self.findings_tree.grid(row=0, column=0, sticky="nsew")
         self.findings_tree.bind("<<TreeviewSelect>>", self._on_finding_selected)
+        self._attach_scrollbars(table_wrap, self.findings_tree)
 
-        self.findings_tree.tag_configure("critical", foreground="#fca5a5")
-        self.findings_tree.tag_configure("high", foreground="#fbbf24")
-        self.findings_tree.tag_configure("medium", foreground="#fde68a")
-        self.findings_tree.tag_configure("low", foreground="#86efac")
-        self.findings_tree.tag_configure("info", foreground="#93c5fd")
+        self.findings_tree.tag_configure("critical", foreground=self.tokens["critical"], background="#1c1520")
+        self.findings_tree.tag_configure("high", foreground=self.tokens["high"], background="#1c1820")
+        self.findings_tree.tag_configure("medium", foreground=self.tokens["medium"], background="#1f1b1f")
+        self.findings_tree.tag_configure("low", foreground=self.tokens["low"], background="#14201f")
+        self.findings_tree.tag_configure("info", foreground=self.tokens["info"], background="#162131")
+        self.findings_tree.tag_configure("alt", background="#102038")
+        self._make_empty_state(table_wrap, "findings", "No findings yet", "Run scan to populate vulnerabilities.")
 
     def _build_services_table(self, parent):
-        ttk.Label(parent, text="Service Inventory", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
-        self.services_tree = ttk.Treeview(parent, columns=("port", "service"), show="headings")
+        table_wrap = self._build_tab_table_shell(parent, "Service Inventory")
+        self.services_tree = ttk.Treeview(table_wrap, columns=("port", "service"), show="headings")
         self.services_tree.heading("port", text="Port")
-        self.services_tree.heading("service", text="Service")
+        self.services_tree.heading("service", text="Service / Product Signature")
         self.services_tree.column("port", width=120, anchor="center")
-        self.services_tree.column("service", width=740, anchor="w")
-        self.services_tree.pack(fill="both", expand=True)
+        self.services_tree.column("service", width=760, anchor="w")
+        self.services_tree.grid(row=0, column=0, sticky="nsew")
         self.services_tree.bind("<<TreeviewSelect>>", self._on_service_selected)
+        self._attach_scrollbars(table_wrap, self.services_tree)
+        self._make_empty_state(table_wrap, "services", "No services discovered", "Enumerated services will appear here.")
 
     def _build_activity_table(self, parent):
-        ttk.Label(parent, text="Execution Timeline", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
-        self.action_tree = ttk.Treeview(parent, columns=("time", "action"), show="headings")
+        table_wrap = self._build_tab_table_shell(parent, "Execution Timeline")
+        self.action_tree = ttk.Treeview(table_wrap, columns=("time", "action"), show="headings")
         self.action_tree.heading("time", text="Timestamp")
         self.action_tree.heading("action", text="Action")
         self.action_tree.column("time", width=160, anchor="center")
-        self.action_tree.column("action", width=700, anchor="w")
-        self.action_tree.pack(fill="both", expand=True)
+        self.action_tree.column("action", width=740, anchor="w")
+        self.action_tree.grid(row=0, column=0, sticky="nsew")
         self.action_tree.bind("<<TreeviewSelect>>", self._on_action_selected)
+        self._attach_scrollbars(table_wrap, self.action_tree)
+        self._make_empty_state(table_wrap, "activity", "No timeline data", "Engine events are streamed during a run.")
 
     def _build_paths_table(self, parent):
-        ttk.Label(parent, text="AI-Prioritized Attack Paths", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
-        self.paths_tree = ttk.Treeview(parent, columns=("id", "kind", "severity", "score", "title"), show="headings")
+        table_wrap = self._build_tab_table_shell(parent, "AI-Prioritized Attack Paths")
+        self.paths_tree = ttk.Treeview(table_wrap, columns=("id", "kind", "severity", "score", "title"), show="headings")
         self.paths_tree.heading("id", text="ID")
         self.paths_tree.heading("kind", text="Kind")
         self.paths_tree.heading("severity", text="Severity")
@@ -344,95 +565,123 @@ class AARTF_GUI:
         self.paths_tree.heading("title", text="Path")
         self.paths_tree.column("id", width=90, anchor="center")
         self.paths_tree.column("kind", width=110, anchor="center")
-        self.paths_tree.column("severity", width=100, anchor="center")
-        self.paths_tree.column("score", width=80, anchor="center")
-        self.paths_tree.column("title", width=550, anchor="w")
-        self.paths_tree.pack(fill="both", expand=True)
+        self.paths_tree.column("severity", width=110, anchor="center")
+        self.paths_tree.column("score", width=90, anchor="center")
+        self.paths_tree.column("title", width=600, anchor="w")
+        self.paths_tree.grid(row=0, column=0, sticky="nsew")
         self.paths_tree.bind("<<TreeviewSelect>>", self._on_path_selected)
+        self._attach_scrollbars(table_wrap, self.paths_tree)
+        self._make_empty_state(table_wrap, "paths", "No attack paths", "Planner output appears after analysis phases.")
 
     def _build_console(self, parent):
-        ttk.Label(parent, text="Live Operator Console", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+        console_card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 12))
+        console_card.grid(row=0, column=0, rowspan=2, sticky="nsew")
+        console_card.columnconfigure(0, weight=1)
+        console_card.rowconfigure(1, weight=1)
+        ttk.Label(console_card, text="Live Operator Console", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         self.console = tk.Text(
-            parent,
-            bg="#0a1222",
-            fg="#7dd3fc",
+            console_card,
+            bg="#091425",
+            fg="#99e8ff",
             insertbackground="#f8fafc",
             wrap="word",
             relief="flat",
             font=("Consolas", 10),
-            padx=10,
-            pady=10,
+            padx=12,
+            pady=12,
         )
-        self.console.pack(fill="both", expand=True)
+        self.console.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+
+    def _attach_scrollbars(self, parent, tree):
+        y_scroll = ttk.Scrollbar(parent, orient="vertical", command=tree.yview)
+        x_scroll = ttk.Scrollbar(parent, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll.grid(row=1, column=0, sticky="ew")
+
+    def _make_empty_state(self, parent, key, title, subtitle):
+        overlay = tk.Frame(parent, bg="#0d192d", bd=1, relief="flat", highlightthickness=1, highlightbackground=self.tokens["border_soft"])
+        overlay.columnconfigure(0, weight=1)
+        tk.Label(overlay, text=title, bg="#0d192d", fg=self.tokens["text_primary"], font=("Segoe UI", 12, "bold")).grid(row=0, column=0, pady=(20, 4), padx=20)
+        tk.Label(overlay, text=subtitle, bg="#0d192d", fg=self.tokens["text_secondary"], font=("Segoe UI", 9)).grid(row=1, column=0, pady=(0, 18), padx=20)
+        self.empty_states[key] = overlay
+        self.root.after(30, lambda: self._show_empty_state(key, True))
+
+    def _show_empty_state(self, key, visible):
+        overlay = self.empty_states.get(key)
+        if not overlay:
+            return
+        if visible:
+            overlay.place(relx=0.5, rely=0.46, anchor="center", relwidth=0.7)
+        else:
+            overlay.place_forget()
 
     def _build_right_panel(self, parent):
         parent.columnconfigure(0, weight=1)
         parent.rowconfigure(1, weight=1)
 
-        severity_card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
-        severity_card.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        ttk.Label(severity_card, text="Risk Breakdown", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+        risk_card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 12))
+        risk_card.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        risk_card.columnconfigure(0, weight=1)
+        ttk.Label(risk_card, text="Risk Breakdown", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(risk_card, textvariable=self.risk_var, style="Caption.TLabel").grid(row=1, column=0, sticky="w", pady=(3, 10))
 
-        self._create_severity_row(severity_card, "Critical", self.critical_var, "#f87171")
-        self._create_severity_row(severity_card, "High", self.high_var, "#f59e0b")
-        self._create_severity_row(severity_card, "Medium", self.medium_var, "#facc15")
-        self._create_severity_row(severity_card, "Low", self.low_var, "#4ade80")
-        self._create_severity_row(severity_card, "Info", self.info_var, "#60a5fa")
+        severities = [
+            ("Critical", self.critical_var, self.tokens["critical"]),
+            ("High", self.high_var, self.tokens["high"]),
+            ("Medium", self.medium_var, self.tokens["medium"]),
+            ("Low", self.low_var, self.tokens["low"]),
+            ("Info", self.info_var, self.tokens["info"]),
+        ]
+        for idx, (label, var, color) in enumerate(severities, start=2):
+            self._create_severity_row(risk_card, idx, label, var, color)
 
-        details_card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
+        details_card = ttk.Frame(parent, style="Card.TFrame", padding=(12, 12))
         details_card.grid(row=1, column=0, sticky="nsew")
         details_card.columnconfigure(0, weight=1)
         details_card.rowconfigure(1, weight=1)
-        ttk.Label(details_card, text="Investigation Details", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
-
+        ttk.Label(details_card, text="Investigation Details", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         self.details_text = tk.Text(
             details_card,
-            bg="#0a1222",
+            bg="#091425",
             fg="#dbeafe",
             insertbackground="#f8fafc",
             wrap="word",
             relief="flat",
             state="disabled",
             font=("Consolas", 10),
-            padx=10,
-            pady=10,
+            padx=12,
+            pady=12,
         )
-        self.details_text.grid(row=1, column=0, sticky="nsew")
+        self.details_text.grid(row=1, column=0, sticky="nsew", pady=(8, 0))
 
-        guidance = ttk.Frame(parent, style="Card.TFrame", padding=(12, 10))
-        guidance.grid(row=2, column=0, sticky="ew", pady=(8, 0))
-        ttk.Label(guidance, text="Run Intelligence", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
-        ttk.Label(guidance, textvariable=self.target_info_var, style="Caption.TLabel").pack(anchor="w", pady=(0, 4))
-        ttk.Label(guidance, textvariable=self.risk_var, style="Caption.TLabel").pack(anchor="w", pady=(0, 4))
+        guidance = ttk.Frame(parent, style="Card.TFrame", padding=(12, 12))
+        guidance.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        ttk.Label(guidance, text="Run Intelligence", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(guidance, textvariable=self.target_info_var, style="Caption.TLabel").pack(anchor="w", pady=(4, 2))
         ttk.Label(
             guidance,
+            text="Start scan with a valid IP/CIDR, then select findings\nor paths to inspect triage context and evidence.",
             style="Caption.TLabel",
             justify="left",
-            text=(
-                "- Start a run with a valid IP or CIDR target.\n"
-                "- Select findings or attack paths for learner guidance.\n"
-                "- Refresh to sync UI with the latest in-memory state.\n"
-                "- Reports and graph assets are available after execution."
-            ),
         ).pack(anchor="w")
 
-    def _create_severity_row(self, parent, label, count_var, color):
-        row = ttk.Frame(parent, style="Card.TFrame")
-        row.pack(fill="x", pady=2)
-        ttk.Label(row, text=label, style="SeverityLabel.TLabel").pack(side="left")
-        badge = tk.Label(
-            row,
-            textvariable=count_var,
-            bg=color,
-            fg="#071018",
-            font=("Segoe UI", 9, "bold"),
-            padx=8,
-            pady=2,
-        )
-        badge.pack(side="right")
+    def _create_severity_row(self, parent, row, label, count_var, color):
+        container = ttk.Frame(parent, style="Card.TFrame")
+        container.grid(row=row, column=0, sticky="ew", pady=3)
+        container.columnconfigure(1, weight=1)
+        tk.Label(container, text=label, bg=self.tokens["bg_card"], fg=self.tokens["text_secondary"], font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w")
+        bar_bg = tk.Frame(container, bg="#1b2b44", height=8)
+        bar_bg.grid(row=0, column=1, sticky="ew", padx=8)
+        bar_bg.grid_propagate(False)
+        bar_fill = tk.Frame(bar_bg, bg=color, width=2)
+        bar_fill.place(x=0, y=0, relheight=1)
+        badge = tk.Label(container, textvariable=count_var, bg=color, fg="#031018", font=("Segoe UI", 8, "bold"), padx=7, pady=2)
+        badge.grid(row=0, column=2, sticky="e")
+        self.risk_bars[label.upper()] = bar_fill
 
     def _build_status_bar(self, parent):
-        status = ttk.Frame(parent, style="Header.TFrame", padding=(12, 8))
+        status = ttk.Frame(parent, style="HeaderCard.TFrame", padding=(12, 8))
         status.grid(row=4, column=0, sticky="ew", pady=(10, 0))
         ttk.Label(status, textvariable=self.status_var, style="Status.TLabel").pack(side="left")
         ttk.Label(status, textvariable=self.phase_var, style="HeaderSub.TLabel").pack(side="left", padx=(14, 0))
@@ -471,6 +720,9 @@ class AARTF_GUI:
 
         tab_name = self.main_notebook.tab(selected, "text")
         self.status_var.set(f"Viewing {tab_name} view")
+        nav_index_map = {0: "overview", 1: "services", 2: "activity", 3: "attack_paths", 4: "console"}
+        if selected in nav_index_map:
+            self._set_nav_active(nav_index_map[selected])
         self._animate_tab_fx(x, max(20, w))
 
     def _animate_tab_fx(self, target_x, target_w):
@@ -587,6 +839,7 @@ class AARTF_GUI:
         state.finalize_assessment()
         self.risk_var.set(f"Risk: {state.assessment['risk_rating']} ({state.assessment['risk_score']}/100)")
         self._update_severity_metrics(vulns)
+        self._update_risk_bars()
         self._replace_tree_rows(
             self.services_tree,
             [
@@ -610,6 +863,9 @@ class AARTF_GUI:
             for entry in actions
         ]
         self._replace_tree_rows(self.action_tree, action_rows)
+        self._show_empty_state("services", len(services) == 0)
+        self._show_empty_state("activity", len(action_rows) == 0)
+        self._show_empty_state("paths", len(state.attack_paths or []) == 0)
 
     def _estimate_asset_count(self, target):
         try:
@@ -629,6 +885,19 @@ class AARTF_GUI:
         self.medium_var.set(str(counts.get("MEDIUM", 0)))
         self.low_var.set(str(counts.get("LOW", 0)))
         self.info_var.set(str(counts.get("INFO", 0)))
+
+    def _update_risk_bars(self):
+        values = {
+            "CRITICAL": int(self.critical_var.get() or "0"),
+            "HIGH": int(self.high_var.get() or "0"),
+            "MEDIUM": int(self.medium_var.get() or "0"),
+            "LOW": int(self.low_var.get() or "0"),
+            "INFO": int(self.info_var.get() or "0"),
+        }
+        total = max(1, sum(values.values()))
+        for severity, fill in self.risk_bars.items():
+            width = max(6, int((values.get(severity, 0) / total) * 180))
+            fill.configure(width=width)
 
     def _normalize_severity(self, vulnerability):
         sev = str(vulnerability.get("severity", "INFO")).strip().upper()
@@ -659,6 +928,9 @@ class AARTF_GUI:
                 tags=(severity.lower(),),
             )
             self.finding_records[finding_id] = vuln
+            if idx % 2 == 0:
+                tags = tuple(list(self.findings_tree.item(self.findings_tree.get_children()[-1], "tags")) + ["alt"])
+                self.findings_tree.item(self.findings_tree.get_children()[-1], tags=tags)
 
         if vulnerabilities:
             first = self.findings_tree.get_children()[0]
@@ -667,6 +939,7 @@ class AARTF_GUI:
             self._on_finding_selected(None)
         else:
             self._set_details("No findings available", ["Run a scan and refresh to inspect vulnerabilities here."])
+        self._show_empty_state("findings", len(vulnerabilities) == 0)
 
     def _build_evidence(self, vulnerability):
         tokens = []
@@ -701,12 +974,14 @@ class AARTF_GUI:
             first = self.paths_tree.get_children()[0]
             self.paths_tree.selection_set(first)
             self.paths_tree.focus(first)
+        self._show_empty_state("paths", len(attack_paths or []) == 0)
 
     def _replace_tree_rows(self, tree, rows):
         for item in tree.get_children():
             tree.delete(item)
-        for row in rows:
-            tree.insert("", "end", values=row)
+        for idx, row in enumerate(rows):
+            tags = ("alt",) if idx % 2 == 1 else ()
+            tree.insert("", "end", values=row, tags=tags)
 
     def _clear_tables(self):
         self._replace_tree_rows(self.services_tree, [])
@@ -727,6 +1002,11 @@ class AARTF_GUI:
         self.info_var.set("0")
         self.risk_var.set("Risk: INFO")
         self._set_details("Awaiting session", ["Start a run to populate findings and contextual details."])
+        self._update_risk_bars()
+        self._show_empty_state("findings", True)
+        self._show_empty_state("services", True)
+        self._show_empty_state("activity", True)
+        self._show_empty_state("paths", True)
 
     def _on_finding_selected(self, _event):
         selected = self.findings_tree.selection()
