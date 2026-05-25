@@ -118,9 +118,9 @@ What it does:
 
 Generated in `reports/`:
 
-- `attack_report_<target>.txt`
-- `attack_report_<target>.pdf`
-- `attack_graph_<target>.png`
+- `attack_report_<target>.txt - Detailed text report`
+- `attack_report_<target>.pdf - Professional PDF`
+- `attack_graph_<target>.png - Attack visualization`
 - `attack_timeline_<target>.mp4` or `.gif` (or `.png` fallback)
 
 ## Troubleshooting
